@@ -242,9 +242,47 @@
     td,th { padding: 0.3rem 0.3rem; }
     .header-actions { display: none; }
   }
+
+  /* ── SYNC INDICATOR ── */
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #6fcf97; display: inline-block;
+    margin-right: 0.4rem; flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .sync-dot.saving { background: var(--gold); animation: pulse 0.8s infinite; }
+  .sync-dot.error  { background: var(--red); }
+  .sync-status {
+    font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--border); display: flex; align-items: center;
+    margin-top: 0.25rem;
+  }
+  /* ── LOADING OVERLAY ── */
+  #loadingOverlay {
+    position: fixed; inset: 0; background: var(--dark);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999; color: var(--cream);
+  }
+  #loadingOverlay h2 { font-family: var(--font-display); color: var(--orange); margin-bottom: 0.5rem; }
+  #loadingOverlay p  { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--border); }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--orange); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin-bottom: 1rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 </style>
 </head>
 <body>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <h2>Hoàn Kiếm</h2>
+  <p>Loading your shift data...</p>
+</div>
 
 <header>
   <div class="logo-wrap">
@@ -253,18 +291,22 @@
   <div class="header-text">
     <h1>Hoàn Kiếm <span>&middot;</span> shift planner</h1>
     <p>Vietnamese Street Food · Cost &amp; Profit Calculator</p>
+    <div class="sync-status">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncLabel">Connected</span>
+    </div>
   </div>
   <div class="header-actions">
-    <button class="btn btn-import" onclick="document.getElementById('csvImportInput').click()">⬆ Import CSV</button>
-    <button class="btn btn-export" onclick="exportToExcel()">⬇ Export to Excel</button>
+    <button class="btn btn-import" onclick="document.getElementById('csvImportInput').click()">&#8679; Import CSV</button>
+    <button class="btn btn-export" onclick="exportToExcel()">&#8681; Export to Excel</button>
   </div>
 </header>
-<input type="file" id="csvImportInput" accept=".csv" onchange="importFromCSV(this)">
+<input type="file" id="csvImportInput" accept=".csv" onchange="importFromCSV(this)" style="display:none;">
 
 <div class="container">
 
   <div class="card">
-    <div class="card-header">⚙ Shift Settings <span class="tag">configure</span></div>
+    <div class="card-header">&#9881; Shift Settings <span class="tag">configure</span></div>
     <div class="card-body">
       <div class="settings-grid">
         <div class="field-group">
@@ -285,9 +327,9 @@
 
   <div class="results-bar">
     <div class="result-cell"><div class="val" id="res-portions">78</div><div class="lbl">Total Portions</div></div>
-    <div class="result-cell"><div class="val" id="res-revenue">£0</div><div class="lbl">Est. Revenue</div></div>
-    <div class="result-cell"><div class="val" id="res-cost">£0</div><div class="lbl">Ingredient Cost</div></div>
-    <div class="result-cell profit"><div class="val" id="res-profit">£0</div><div class="lbl">Est. Profit</div></div>
+    <div class="result-cell"><div class="val" id="res-revenue">&#163;0</div><div class="lbl">Est. Revenue</div></div>
+    <div class="result-cell"><div class="val" id="res-cost">&#163;0</div><div class="lbl">Ingredient Cost</div></div>
+    <div class="result-cell profit"><div class="val" id="res-profit">&#163;0</div><div class="lbl">Est. Profit</div></div>
     <div class="result-cell"><div class="val" id="res-margin">0%</div><div class="lbl">Margin</div></div>
   </div>
 
@@ -299,12 +341,12 @@
 
   <div id="tab-menu" class="tab-panel active">
     <div class="card">
-      <div class="card-header">🍜 Menu Items <span class="tag">prices · mix · links</span></div>
+      <div class="card-header">&#127836; Menu Items <span class="tag">prices · mix · links</span></div>
       <div class="card-body">
         <table>
           <thead><tr>
             <th style="min-width:150px;">Item</th>
-            <th>Price (£)</th>
+            <th>Price (&#163;)</th>
             <th>% Orders</th>
             <th>Portions</th>
             <th>Cost/Portion</th>
@@ -323,13 +365,13 @@
 
   <div id="tab-ingredients" class="tab-panel">
     <div class="card">
-      <div class="card-header">🌿 Ingredients <span class="tag">costs · ratios · linked dishes</span></div>
+      <div class="card-header">&#127807; Ingredients <span class="tag">costs · ratios · linked dishes</span></div>
       <div class="card-body">
         <table>
           <thead><tr>
             <th>Ingredient</th>
             <th>Unit</th>
-            <th>Cost/Unit (£)</th>
+            <th>Cost/Unit (&#163;)</th>
             <th>Portions/Unit</th>
             <th>Cost/Portion</th>
             <th>Units Needed</th>
@@ -346,7 +388,7 @@
 
   <div id="tab-shopping" class="tab-panel">
     <div class="card">
-      <div class="card-header">🛒 Shopping List <span class="tag">for this shift</span></div>
+      <div class="card-header">&#128722; Shopping List <span class="tag">for this shift</span></div>
       <div class="card-body">
         <table>
           <thead><tr>
@@ -361,7 +403,7 @@
           <tfoot>
             <tr>
               <td colspan="4" style="font-weight:700;text-align:right;padding-top:0.7rem;font-size:0.7rem;letter-spacing:0.05em;text-transform:uppercase;">Total Spend</td>
-              <td style="font-weight:700;color:var(--red);" id="shoppingTotal">£0.00</td>
+              <td style="font-weight:700;color:var(--red);" id="shoppingTotal">&#163;0.00</td>
               <td></td>
             </tr>
           </tfoot>
@@ -386,8 +428,83 @@
   </div>
 </div>
 
+<!-- Firebase SDKs (compat/CDN — no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
 <script>
-// ── DATA ──
+// ── FIREBASE INIT ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAltDMeXRhogxIzzR91lrIe8ZhQQQfRJbI",
+  authDomain: "hoan-kiem-4b88f.firebaseapp.com",
+  projectId: "hoan-kiem-4b88f",
+  storageBucket: "hoan-kiem-4b88f.firebasestorage.app",
+  messagingSenderId: "342299756104",
+  appId: "1:342299756104:web:f9b3265e26a7bd940e3a7d"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const DOC = db.collection('planner').doc('data');
+
+// ── SYNC STATE ──
+let saveTimer = null;
+function setSyncStatus(state) {
+  const dot   = document.getElementById('syncDot');
+  const label = document.getElementById('syncLabel');
+  if (state === 'saving') { dot.className='sync-dot saving'; label.textContent='Saving...'; }
+  else if (state === 'saved') { dot.className='sync-dot'; label.textContent='All changes saved'; }
+  else if (state === 'error') { dot.className='sync-dot error'; label.textContent='Save failed — check connection'; }
+  else { dot.className='sync-dot'; label.textContent='Connected'; }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  setSyncStatus('saving');
+  saveTimer = setTimeout(saveToFirebase, 800);
+}
+
+async function saveToFirebase() {
+  try {
+    await DOC.set({
+      shiftHours: getShiftHours(),
+      portionsPerHour: getPortionsPerHour(),
+      menuItems: menuItems,
+      ingredients: ingredients,
+      nextMenuId: nextMenuId,
+      nextIngId: nextIngId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    setSyncStatus('saved');
+  } catch(e) {
+    console.error('Save failed:', e);
+    setSyncStatus('error');
+  }
+}
+
+async function loadFromFirebase() {
+  try {
+    const doc = await DOC.get();
+    if (doc.exists) {
+      const d = doc.data();
+      if (d.menuItems)      menuItems      = d.menuItems;
+      if (d.ingredients)    ingredients    = d.ingredients;
+      if (d.nextMenuId)     nextMenuId     = d.nextMenuId;
+      if (d.nextIngId)      nextIngId      = d.nextIngId;
+      if (d.shiftHours)     document.getElementById('shiftHours').value     = d.shiftHours;
+      if (d.portionsPerHour) document.getElementById('portionsPerHour').value = d.portionsPerHour;
+    }
+    updateAll();
+    setSyncStatus('saved');
+  } catch(e) {
+    console.error('Load failed:', e);
+    setSyncStatus('error');
+    updateAll(); // still render with defaults
+  } finally {
+    document.getElementById('loadingOverlay').style.display = 'none';
+  }
+}
+
+// ── DEFAULT DATA ──
 let menuItems = [
   { id:1, name:'Lemongrass Chicken + Rice',    price:13, pct:20, linkedIngIds:[4,3,1,7,9,13] },
   { id:2, name:'Lemongrass Chicken + Noodles', price:13, pct:15, linkedIngIds:[4,2,1,7,9,13] },
@@ -398,23 +515,21 @@ let menuItems = [
   { id:7, name:'Lemonade',                       price:3,  pct:5,  linkedIngIds:[11] },
   { id:8, name:'Tiramisu',                       price:5,  pct:5,  linkedIngIds:[12] },
 ];
-
 let ingredients = [
-  { id:1,  name:'Romaine Lettuce',    unit:'bag',      cost:1.50, portionsPerUnit:5  },
-  { id:2,  name:'Noodles',            unit:'bag',      cost:1.20, portionsPerUnit:10 },
-  { id:3,  name:'Rice',               unit:'bag',      cost:1.00, portionsPerUnit:10 },
-  { id:4,  name:'Chicken',            unit:'kg',       cost:5.00, portionsPerUnit:8  },
-  { id:5,  name:'Pork',               unit:'kg',       cost:4.50, portionsPerUnit:8  },
-  { id:6,  name:'Chicken Wings',      unit:'kg',       cost:4.00, portionsPerUnit:6  },
-  { id:7,  name:'Thai Basil',         unit:'bunch',    cost:0.80, portionsPerUnit:15 },
-  { id:8,  name:'Coriander',          unit:'bunch',    cost:0.60, portionsPerUnit:15 },
-  { id:9,  name:'Spring Onion',       unit:'bunch',    cost:0.50, portionsPerUnit:15 },
-  { id:10, name:'Coffee',             unit:'portion',  cost:0.80, portionsPerUnit:1  },
-  { id:11, name:'Lemonade Mix',       unit:'portion',  cost:0.50, portionsPerUnit:1  },
-  { id:12, name:'Tiramisu',           unit:'portion',  cost:1.50, portionsPerUnit:1  },
-  { id:13, name:'Perilla',            unit:'bunch',    cost:0.70, portionsPerUnit:15 },
+  { id:1,  name:'Romaine Lettuce',  unit:'bag',     cost:1.50, portionsPerUnit:5  },
+  { id:2,  name:'Noodles',          unit:'bag',     cost:1.20, portionsPerUnit:10 },
+  { id:3,  name:'Rice',             unit:'bag',     cost:1.00, portionsPerUnit:10 },
+  { id:4,  name:'Chicken',          unit:'kg',      cost:5.00, portionsPerUnit:8  },
+  { id:5,  name:'Pork',             unit:'kg',      cost:4.50, portionsPerUnit:8  },
+  { id:6,  name:'Chicken Wings',    unit:'kg',      cost:4.00, portionsPerUnit:6  },
+  { id:7,  name:'Thai Basil',       unit:'bunch',   cost:0.80, portionsPerUnit:15 },
+  { id:8,  name:'Coriander',        unit:'bunch',   cost:0.60, portionsPerUnit:15 },
+  { id:9,  name:'Spring Onion',     unit:'bunch',   cost:0.50, portionsPerUnit:15 },
+  { id:10, name:'Coffee',           unit:'portion', cost:0.80, portionsPerUnit:1  },
+  { id:11, name:'Lemonade Mix',     unit:'portion', cost:0.50, portionsPerUnit:1  },
+  { id:12, name:'Tiramisu',         unit:'portion', cost:1.50, portionsPerUnit:1  },
+  { id:13, name:'Perilla',          unit:'bunch',   cost:0.70, portionsPerUnit:15 },
 ];
-
 let nextMenuId = 9, nextIngId = 14;
 let modalTargetId = null, modalTempLinks = [];
 
@@ -422,13 +537,13 @@ let modalTargetId = null, modalTempLinks = [];
 const getShiftHours      = () => parseFloat(document.getElementById('shiftHours').value) || 6;
 const getPortionsPerHour = () => parseFloat(document.getElementById('portionsPerHour').value) || 13;
 const getTotalPortions   = () => Math.round(getShiftHours() * getPortionsPerHour());
-const fmt   = n => '£' + n.toFixed(2);
-const fmtP  = n => n.toFixed(1) + '%';
-const esc   = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const ingCostPP  = ing  => ing.portionsPerUnit > 0 ? ing.cost / ing.portionsPerUnit : 0;
-const itemCostPP = item => item.linkedIngIds.reduce((s,id)=>{ const i=ingredients.find(x=>x.id===id); return i?s+ingCostPP(i):s; },0);
-const itemPortions = item => Math.round(getTotalPortions() * item.pct / 100);
-const usedInNames  = ingId => menuItems.filter(m=>m.linkedIngIds.includes(ingId)).map(m=>m.name);
+const fmt  = n => '&#163;' + n.toFixed(2);
+const fmtP = n => n.toFixed(1) + '%';
+const esc  = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const ingCostPP   = ing  => ing.portionsPerUnit > 0 ? ing.cost / ing.portionsPerUnit : 0;
+const itemCostPP  = item => item.linkedIngIds.reduce((s,id)=>{ const i=ingredients.find(x=>x.id===id); return i?s+ingCostPP(i):s; },0);
+const itemPortions= item => Math.round(getTotalPortions() * item.pct / 100);
+const usedInNames = ingId => menuItems.filter(m=>m.linkedIngIds.includes(ingId)).map(m=>m.name);
 
 // ── RENDER MENU ──
 function renderMenu() {
@@ -445,7 +560,7 @@ function renderMenu() {
     totalProfit += profit;
     const chipsHtml = item.linkedIngIds.map(id => {
       const ing = ingredients.find(x=>x.id===id);
-      return ing ? `<span class="chip">${esc(ing.name)}<button class="chip-del" onclick="unlinkIng(${item.id},${id})" title="Remove">×</button></span>` : '';
+      return ing ? `<span class="chip">${esc(ing.name)}<button class="chip-del" onclick="unlinkIng(${item.id},${id})" title="Remove">&#215;</button></span>` : '';
     }).join('');
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -457,7 +572,7 @@ function renderMenu() {
       <td class="calc-cell highlight">${fmt(rev)}</td>
       <td class="${profit>=0?'pos':'neg'}">${fmt(profit)}</td>
       <td><div class="link-chips">${chipsHtml}<button class="chip-link-btn" onclick="openModal(${item.id})">+ Link</button></div></td>
-      <td><button class="btn btn-del" onclick="removeMenuItem(${item.id})">✕</button></td>
+      <td><button class="btn btn-del" onclick="removeMenuItem(${item.id})">&#10005;</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -502,7 +617,7 @@ function renderIngredients() {
       <td class="calc-cell">${unitsNeeded}</td>
       <td class="calc-cell highlight">${fmt(cost)}</td>
       <td><div class="link-chips">${usedHtml}</div></td>
-      <td><button class="btn btn-del" onclick="removeIngredient(${ing.id})">✕</button></td>
+      <td><button class="btn btn-del" onclick="removeIngredient(${ing.id})">&#10005;</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -540,7 +655,7 @@ function renderShopping() {
     `;
     tbody.appendChild(tr);
   });
-  document.getElementById('shoppingTotal').textContent = fmt(totalCost);
+  document.getElementById('shoppingTotal').textContent = fmt(totalCost).replace('&#163;','£');
   return totalCost;
 }
 
@@ -553,21 +668,21 @@ function updateAll() {
   const cost = renderIngredients();
   renderShopping();
   const margin = revenue > 0 ? (profit / revenue * 100) : 0;
-  document.getElementById('res-revenue').textContent = fmt(revenue);
-  document.getElementById('res-cost').textContent = fmt(cost);
-  document.getElementById('res-profit').textContent = fmt(profit);
-  document.getElementById('res-margin').textContent = fmtP(margin);
+  document.getElementById('res-revenue').textContent = '£' + revenue.toFixed(2);
+  document.getElementById('res-cost').textContent    = '£' + cost.toFixed(2);
+  document.getElementById('res-profit').textContent  = '£' + profit.toFixed(2);
+  document.getElementById('res-margin').textContent  = fmtP(margin);
   document.getElementById('res-profit').parentElement.className = 'result-cell ' + (profit >= 0 ? 'profit' : 'loss');
 }
 
-// ── MUTATIONS ──
-function updateMenu(id, field, val) { const m=menuItems.find(x=>x.id===id); if(m) m[field]=val; updateAll(); }
-function removeMenuItem(id) { menuItems=menuItems.filter(m=>m.id!==id); updateAll(); }
-function addMenuItem() { menuItems.push({id:nextMenuId++,name:'New Item',price:0,pct:0,linkedIngIds:[]}); updateAll(); }
-function updateIng(id, field, val) { const i=ingredients.find(x=>x.id===id); if(i) i[field]=val; updateAll(); }
-function removeIngredient(id) { menuItems.forEach(m=>{ m.linkedIngIds=m.linkedIngIds.filter(x=>x!==id); }); ingredients=ingredients.filter(i=>i.id!==id); updateAll(); }
-function addIngredient() { ingredients.push({id:nextIngId++,name:'New Ingredient',unit:'unit',cost:0,portionsPerUnit:1}); updateAll(); document.querySelector('[data-tab="ingredients"]').click(); }
-function unlinkIng(menuId, ingId) { const m=menuItems.find(x=>x.id===menuId); if(m) m.linkedIngIds=m.linkedIngIds.filter(x=>x!==ingId); updateAll(); }
+// ── MUTATIONS (all trigger scheduleSave) ──
+function updateMenu(id, field, val) { const m=menuItems.find(x=>x.id===id); if(m) m[field]=val; updateAll(); scheduleSave(); }
+function removeMenuItem(id) { menuItems=menuItems.filter(m=>m.id!==id); updateAll(); scheduleSave(); }
+function addMenuItem() { menuItems.push({id:nextMenuId++,name:'New Item',price:0,pct:0,linkedIngIds:[]}); updateAll(); scheduleSave(); }
+function updateIng(id, field, val) { const i=ingredients.find(x=>x.id===id); if(i) i[field]=val; updateAll(); scheduleSave(); }
+function removeIngredient(id) { menuItems.forEach(m=>{ m.linkedIngIds=m.linkedIngIds.filter(x=>x!==id); }); ingredients=ingredients.filter(i=>i.id!==id); updateAll(); scheduleSave(); }
+function addIngredient() { ingredients.push({id:nextIngId++,name:'New Ingredient',unit:'unit',cost:0,portionsPerUnit:1}); updateAll(); scheduleSave(); document.querySelector('[data-tab="ingredients"]').click(); }
+function unlinkIng(menuId, ingId) { const m=menuItems.find(x=>x.id===menuId); if(m) m.linkedIngIds=m.linkedIngIds.filter(x=>x!==ingId); updateAll(); scheduleSave(); }
 
 // ── MODAL ──
 function openModal(menuId) {
@@ -585,7 +700,7 @@ function openModal(menuId) {
     div.dataset.ingId = ing.id;
     div.innerHTML = `<input type="checkbox" id="mc_${ing.id}" ${checked?'checked':''}>
       <span class="modal-item-name">${esc(ing.name)}</span>
-      <span class="modal-item-cost">${fmt(ingCostPP(ing))}/portion</span>`;
+      <span class="modal-item-cost">${fmt(ingCostPP(ing)).replace('&#163;','£')}/portion</span>`;
     div.addEventListener('click', e => { if(e.target.tagName==='INPUT') return; const cb=div.querySelector('input'); cb.checked=!cb.checked; handleModalCheck(ing.id,cb.checked,div); });
     div.querySelector('input').addEventListener('change', function() { handleModalCheck(ing.id,this.checked,div); });
     list.appendChild(div);
@@ -602,9 +717,9 @@ function updateModalSub() {
   const totalCpp = modalTempLinks.reduce((s,id)=>{ const i=ingredients.find(x=>x.id===id); return i?s+ingCostPP(i):s; },0);
   document.getElementById('modalSub').textContent = modalTempLinks.length===0
     ? 'No ingredients linked yet.'
-    : `${modalTempLinks.length} linked · Combined cost: ${fmt(totalCpp)}/portion`;
+    : `${modalTempLinks.length} linked · Combined cost: £${totalCpp.toFixed(2)}/portion`;
 }
-function saveLinks() { const m=menuItems.find(x=>x.id===modalTargetId); if(m) m.linkedIngIds=[...modalTempLinks]; closeModal(); updateAll(); }
+function saveLinks() { const m=menuItems.find(x=>x.id===modalTargetId); if(m) m.linkedIngIds=[...modalTempLinks]; closeModal(); updateAll(); scheduleSave(); }
 function closeModal() { document.getElementById('linkModal').classList.remove('open'); modalTargetId=null; modalTempLinks=[]; }
 document.getElementById('linkModal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeModal(); });
 
@@ -616,109 +731,64 @@ function switchTab(btn, name) {
   btn.classList.add('active');
 }
 
-// ── EXPORT TO EXCEL (CSV with Excel-compatible formulas) ──
+// ── SHIFT SETTINGS CHANGE ──
+document.getElementById('shiftHours').addEventListener('input', function() { updateAll(); scheduleSave(); });
+document.getElementById('portionsPerHour').addEventListener('input', function() { updateAll(); scheduleSave(); });
+
+// ── EXPORT TO EXCEL ──
 function exportToExcel() {
   const hours = getShiftHours();
   const pph   = getPortionsPerHour();
-  const total = getTotalPortions();
-
-  // Build CSV rows
-  const rows = [];
-
-  // ── SETTINGS sheet section ──
-  rows.push(['HOÀN KIẾM SHIFT PLANNER','','','','','','','','','']);
-  rows.push(['Generated:', new Date().toLocaleString()]);
+  const rows  = [];
+  rows.push(['"HOÀN KIẾM SHIFT PLANNER"']);
+  rows.push(['"Generated:"', '"' + new Date().toLocaleString() + '"']);
   rows.push([]);
-  rows.push(['=== SHIFT SETTINGS ===']);
-  rows.push(['Shift Hours', hours]);
-  rows.push(['Portions Per Hour', pph]);
-  rows.push(['Total Portions', '=B5*B6']);
+  rows.push(['"=== SHIFT SETTINGS ==="']);
+  rows.push(['"Shift Hours"', hours]);
+  rows.push(['"Portions Per Hour"', pph]);
+  rows.push(['"Total Portions"', '=B5*B6']);
   rows.push([]);
-
-  // ── INGREDIENTS section ──
-  rows.push(['=== INGREDIENTS ===']);
-  rows.push(['Ingredient','Unit','Cost/Unit (£)','Portions/Unit','Cost/Portion','Units Needed','Total Cost']);
-
-  const ingStartRow = rows.length + 1; // 1-indexed
+  rows.push(['"=== INGREDIENTS ==="']);
+  rows.push(['"Ingredient"','"Unit"','"Cost/Unit (£)"','"Portions/Unit"','"Cost/Portion"','"Units Needed"','"Total Cost"']);
+  const ingStartRow = rows.length + 1;
   ingredients.forEach((ing, i) => {
     const linkedItems = menuItems.filter(m => m.linkedIngIds.includes(ing.id));
     const portionsNeeded = linkedItems.reduce((s,m) => s + itemPortions(m), 0);
     const unitsNeeded = portionsNeeded > 0 ? Math.ceil(portionsNeeded / ing.portionsPerUnit) : 0;
-    const rowNum = ingStartRow + i;
-    // Cost/Portion = C/D, Units Needed = CEILING(portions/D), Total = F*C
-    rows.push([
-      ing.name,
-      ing.unit,
-      ing.cost,
-      ing.portionsPerUnit,
-      `=C${rowNum}/D${rowNum}`,
-      unitsNeeded,
-      `=F${rowNum}*C${rowNum}`
-    ]);
+    const rn = ingStartRow + i;
+    rows.push(['"'+ing.name+'"', '"'+ing.unit+'"', ing.cost, ing.portionsPerUnit, '=C'+rn+'/D'+rn, unitsNeeded, '=F'+rn+'*C'+rn]);
   });
-  // Totals row
   const ingEndRow = ingStartRow + ingredients.length - 1;
-  rows.push(['TOTAL INGREDIENT COST','','','','','', `=SUM(G${ingStartRow}:G${ingEndRow})`]);
+  rows.push(['"TOTAL INGREDIENT COST"','','','','','','=SUM(G'+ingStartRow+':G'+ingEndRow+')']);
   rows.push([]);
-
-  // ── MENU ITEMS section ──
-  rows.push(['=== MENU ITEMS ===']);
-  rows.push(['Item','Price (£)','% of Orders','Est. Portions','Ing. Cost/Portion','Revenue','Profit']);
+  rows.push(['"=== MENU ITEMS ==="']);
+  rows.push(['"Item"','"Price (£)"','"% of Orders"','"Est. Portions"','"Ing. Cost/Portion"','"Revenue"','"Profit"']);
   const menuStartRow = rows.length + 1;
   menuItems.forEach((item, i) => {
-    const portions = itemPortions(item);
-    const costPP   = itemCostPP(item);
-    const rowNum   = menuStartRow + i;
-    rows.push([
-      item.name,
-      item.price,
-      item.pct / 100,
-      `=B7*C${rowNum}`,
-      costPP.toFixed(4),
-      `=B${rowNum}*D${rowNum}`,
-      `=F${rowNum}-(E${rowNum}*D${rowNum})`
-    ]);
+    const costPP = itemCostPP(item);
+    const rn = menuStartRow + i;
+    rows.push(['"'+item.name+'"', item.price, item.pct/100, '=B7*C'+rn, costPP.toFixed(4), '=B'+rn+'*D'+rn, '=F'+rn+'-(E'+rn+'*D'+rn+')']);
   });
   const menuEndRow = menuStartRow + menuItems.length - 1;
-  rows.push(['TOTALS','',`=SUM(C${menuStartRow}:C${menuEndRow})`,'','',`=SUM(F${menuStartRow}:F${menuEndRow})`,`=SUM(G${menuStartRow}:G${menuEndRow})`]);
+  rows.push(['"TOTALS"','','=SUM(C'+menuStartRow+':C'+menuEndRow+')','','','=SUM(F'+menuStartRow+':F'+menuEndRow+')','=SUM(G'+menuStartRow+':G'+menuEndRow+')']);
   rows.push([]);
-
-  // ── SHOPPING LIST section ──
-  rows.push(['=== SHOPPING LIST (this shift) ===']);
-  rows.push(['Ingredient','Units Needed','Unit','Cost/Unit (£)','Total Cost','Used In']);
+  rows.push(['"=== SHOPPING LIST ==="']);
+  rows.push(['"Ingredient"','"Units Needed"','"Unit"','"Cost/Unit (£)"','"Total Cost"','"Used In"']);
   ingredients.forEach(ing => {
     const linkedItems = menuItems.filter(m => m.linkedIngIds.includes(ing.id));
     const portionsNeeded = linkedItems.reduce((s,m) => s + itemPortions(m), 0);
     if (portionsNeeded === 0) return;
     const unitsNeeded = Math.ceil(portionsNeeded / ing.portionsPerUnit);
-    rows.push([
-      ing.name,
-      unitsNeeded,
-      ing.unit,
-      ing.cost,
-      unitsNeeded * ing.cost,
-      usedInNames(ing.id).join(', ')
-    ]);
+    rows.push(['"'+ing.name+'"', unitsNeeded, '"'+ing.unit+'"', ing.cost, unitsNeeded*ing.cost, '"'+usedInNames(ing.id).join(', ')+'"']);
   });
-
-  // ── Convert to CSV ──
-  const csvContent = rows.map(row =>
-    row.map(cell => {
-      const s = String(cell === null || cell === undefined ? '' : cell);
-      return '"' + s.replace(/"/g, '""') + '"';
-    }).join(',')
-  ).join('\r\n');
-
-  const BOM = '\uFEFF';
-  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const csv = rows.map(r => r.join(',')).join('\r\n');
+  const encoded = encodeURIComponent('\uFEFF' + csv);
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encoded;
   a.download = 'hoan-kiem-shift-' + new Date().toISOString().slice(0,10) + '.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
 }
 
 // ── IMPORT FROM CSV ──
@@ -728,87 +798,64 @@ function importFromCSV(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const text = e.target.result.replace(/^\uFEFF/, ''); // strip BOM
+      const text = e.target.result.replace(/^\uFEFF/, '');
       const lines = text.split(/\r?\n/);
-
-      // Parse CSV rows
       function parseRow(line) {
-        const result = [];
-        let current = '', inQuotes = false;
+        const result = []; let current = '', inQuotes = false;
         for (let i = 0; i < line.length; i++) {
           const ch = line[i];
-          if (ch === '"' && inQuotes && line[i+1] === '"') { current += '"'; i++; }
-          else if (ch === '"') { inQuotes = !inQuotes; }
-          else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
-          else { current += ch; }
+          if (ch==='"' && inQuotes && line[i+1]==='"') { current+='"'; i++; }
+          else if (ch==='"') { inQuotes=!inQuotes; }
+          else if (ch===',' && !inQuotes) { result.push(current.replace(/^"|"$/g,'')); current=''; }
+          else { current+=ch; }
         }
-        result.push(current);
+        result.push(current.replace(/^"|"$/g,''));
         return result;
       }
-
-      // Find section markers
-      let ingSection = -1, menuSection = -1;
-      lines.forEach((l, i) => {
-        if (l.startsWith('=== INGREDIENTS')) ingSection = i;
-        if (l.startsWith('=== MENU ITEMS')) menuSection = i;
+      let ingSection=-1, menuSection=-1;
+      lines.forEach((l,i) => {
+        if (l.includes('=== INGREDIENTS')) ingSection=i;
+        if (l.includes('=== MENU ITEMS')) menuSection=i;
       });
-
-      // Parse SHIFT SETTINGS
       lines.forEach(l => {
         const r = parseRow(l);
-        if (r[0] === 'Shift Hours' && r[1]) document.getElementById('shiftHours').value = parseFloat(r[1]) || 6;
-        if (r[0] === 'Portions Per Hour' && r[1]) document.getElementById('portionsPerHour').value = parseFloat(r[1]) || 13;
+        if (r[0]==='Shift Hours' && r[1]) document.getElementById('shiftHours').value = parseFloat(r[1])||6;
+        if (r[0]==='Portions Per Hour' && r[1]) document.getElementById('portionsPerHour').value = parseFloat(r[1])||13;
       });
-
-      // Parse INGREDIENTS (skip 2 header rows after marker)
       if (ingSection >= 0) {
-        const newIngs = [];
-        let id = 1;
-        for (let i = ingSection + 2; i < lines.length; i++) {
+        const newIngs = []; let id = 1;
+        for (let i = ingSection+2; i < lines.length; i++) {
           const r = parseRow(lines[i]);
-          if (!r[0] || r[0].startsWith('===') || r[0] === 'TOTAL INGREDIENT COST') break;
-          if (r[0] === 'Ingredient') continue; // header
-          const cost = parseFloat(r[2]) || 0;
-          const ppu  = parseFloat(r[3]) || 1;
-          newIngs.push({ id: id++, name: r[0], unit: r[1]||'unit', cost, portionsPerUnit: ppu });
+          if (!r[0] || r[0].includes('===') || r[0]==='TOTAL INGREDIENT COST') break;
+          if (r[0]==='Ingredient') continue;
+          newIngs.push({ id:id++, name:r[0], unit:r[1]||'unit', cost:parseFloat(r[2])||0, portionsPerUnit:parseFloat(r[3])||1 });
         }
-        if (newIngs.length > 0) { ingredients = newIngs; nextIngId = id; }
+        if (newIngs.length>0) { ingredients=newIngs; nextIngId=id; }
       }
-
-      // Parse MENU ITEMS (skip 2 header rows after marker)
       if (menuSection >= 0) {
-        const newMenu = [];
-        let id = 1;
-        for (let i = menuSection + 2; i < lines.length; i++) {
+        const newMenu = []; let id = 1;
+        for (let i = menuSection+2; i < lines.length; i++) {
           const r = parseRow(lines[i]);
-          if (!r[0] || r[0].startsWith('===') || r[0] === 'TOTALS') break;
-          if (r[0] === 'Item') continue;
-          const price = parseFloat(r[1]) || 0;
-          const pct   = Math.round((parseFloat(r[2]) || 0) * 100);
-          // Re-link ingredients by name match
-          const linkedIngIds = ingredients
-            .filter(ing => r[5] && r[5].includes(ing.name))
-            .map(ing => ing.id);
-          newMenu.push({ id: id++, name: r[0], price, pct, linkedIngIds });
+          if (!r[0] || r[0].includes('===') || r[0]==='TOTALS') break;
+          if (r[0]==='Item') continue;
+          const pct = Math.round((parseFloat(r[2])||0)*100);
+          newMenu.push({ id:id++, name:r[0], price:parseFloat(r[1])||0, pct, linkedIngIds:[] });
         }
-        if (newMenu.length > 0) { menuItems = newMenu; nextMenuId = id; }
+        if (newMenu.length>0) { menuItems=newMenu; nextMenuId=id; }
       }
-
-      updateAll();
-      alert('✓ Imported successfully!');
+      updateAll(); scheduleSave();
+      alert('Imported successfully!');
     } catch(err) {
       alert('Import failed. Please use a file exported from this planner.');
       console.error(err);
     }
-    input.value = ''; // reset file input
+    input.value = '';
   };
   reader.readAsText(file);
 }
 
-// ── INIT ──
-document.getElementById('shiftHours').addEventListener('input', updateAll);
-document.getElementById('portionsPerHour').addEventListener('input', updateAll);
-updateAll();
+// ── START: load from Firebase ──
+loadFromFirebase();
 </script>
 </body>
 </html>
