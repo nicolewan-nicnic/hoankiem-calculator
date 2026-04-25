@@ -330,6 +330,7 @@
     <div class="result-cell"><div class="val" id="res-revenue">&#163;0</div><div class="lbl">Est. Revenue</div></div>
     <div class="result-cell"><div class="val" id="res-cost">&#163;0</div><div class="lbl">Ingredient Cost</div></div>
     <div class="result-cell profit"><div class="val" id="res-profit">&#163;0</div><div class="lbl">Est. Profit</div></div>
+    <div class="result-cell"><div class="val" id="res-misc">&#163;0</div><div class="lbl">Misc Costs</div></div>
     <div class="result-cell"><div class="val" id="res-margin">0%</div><div class="lbl">Margin</div></div>
   </div>
 
@@ -337,6 +338,7 @@
     <button class="tab active" data-tab="menu" onclick="switchTab(this,'menu')">Menu Items</button>
     <button class="tab" data-tab="ingredients" onclick="switchTab(this,'ingredients')">Ingredients</button>
     <button class="tab" data-tab="shopping" onclick="switchTab(this,'shopping')">Shopping List</button>
+    <button class="tab" data-tab="misc" onclick="switchTab(this,'misc')">Misc Expenses</button>
   </div>
 
   <div id="tab-menu" class="tab-panel active">
@@ -412,6 +414,27 @@
     </div>
   </div>
 
+  <div id="tab-misc" class="tab-panel">
+    <div class="card">
+      <div class="card-header">&#128181; Misc Expenses <span class="tag">overheads · fees · packaging</span></div>
+      <div class="card-body">
+        <table>
+          <thead><tr>
+            <th style="min-width:180px;">Expense</th>
+            <th>Category</th>
+            <th>Cost (&#163;)</th>
+            <th>Type</th>
+            <th>Notes</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="miscBody"></tbody>
+        </table>
+        <button class="btn btn-add" onclick="addMiscItem()">+ Add Expense</button>
+        <p class="notice">Type = "Per Shift" (fixed cost per shift) or "Per Portion" (multiplied by total portions sold). Both reduce your profit.</p>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <footer>Hoàn Kiếm shift planner · From Vietnam's tables to yours</footer>
@@ -470,8 +493,10 @@ async function saveToFirebase() {
       portionsPerHour: getPortionsPerHour(),
       menuItems: menuItems,
       ingredients: ingredients,
+      miscItems: miscItems,
       nextMenuId: nextMenuId,
       nextIngId: nextIngId,
+      nextMiscId: nextMiscId,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('saved');
@@ -490,6 +515,8 @@ async function loadFromFirebase() {
       if (d.ingredients)    ingredients    = d.ingredients;
       if (d.nextMenuId)     nextMenuId     = d.nextMenuId;
       if (d.nextIngId)      nextIngId      = d.nextIngId;
+    if (d.miscItems)      miscItems      = d.miscItems;
+    if (d.nextMiscId)     nextMiscId     = d.nextMiscId;
       if (d.shiftHours)     document.getElementById('shiftHours').value     = d.shiftHours;
       if (d.portionsPerHour) document.getElementById('portionsPerHour').value = d.portionsPerHour;
     }
@@ -531,6 +558,14 @@ let ingredients = [
   { id:13, name:'Perilla',          unit:'bunch',   cost:0.70, portionsPerUnit:15 },
 ];
 let nextMenuId = 9, nextIngId = 14;
+let miscItems = [
+  { id:1, name:'Market Pitch Fee',     category:'Venue',      cost:40,   type:'perShift'   },
+  { id:2, name:'Packaging & Boxes',    category:'Packaging',  cost:0.30, type:'perPortion' },
+  { id:3, name:'Napkins & Cutlery',    category:'Packaging',  cost:0.10, type:'perPortion' },
+  { id:4, name:'Gas Canister',         category:'Equipment',  cost:8,    type:'perShift'   },
+  { id:5, name:'Card Reader Fee (2%)', category:'Fees',       cost:0,    type:'perShift', notes:'Edit to actual fee' },
+];
+let nextMiscId = 6;
 let modalTargetId = null, modalTempLinks = [];
 
 // ── HELPERS ──
@@ -632,6 +667,44 @@ function renderIngredients() {
   return totalCost;
 }
 
+
+// ── RENDER MISC ──
+function renderMisc() {
+  const tbody = document.getElementById('miscBody');
+  tbody.innerHTML = '';
+  const total = getTotalPortions();
+  let totalMisc = 0;
+  miscItems.forEach(mis => {
+    const effectiveCost = mis.type === 'perPortion' ? mis.cost * total : mis.cost;
+    totalMisc += effectiveCost;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" value="${esc(mis.name)}" onchange="updateMisc(${mis.id},'name',this.value)" style="min-width:160px;"></td>
+      <td><input type="text" value="${esc(mis.category||'')}" onchange="updateMisc(${mis.id},'category',this.value)" style="width:100px;"></td>
+      <td><input type="number" value="${mis.cost}" min="0" step="0.01" onchange="updateMisc(${mis.id},'cost',+this.value)" style="width:70px;"></td>
+      <td>
+        <select onchange="updateMisc(${mis.id},'type',this.value)" style="font-family:var(--font-body);font-size:0.75rem;border:1px solid var(--border);background:var(--cream);padding:0.25rem 0.35rem;border-radius:2px;outline:none;color:var(--dark);">
+          <option value="perShift" ${mis.type==='perShift'?'selected':''}>Per Shift</option>
+          <option value="perPortion" ${mis.type==='perPortion'?'selected':''}>Per Portion</option>
+        </select>
+      </td>
+      <td><input type="text" value="${esc(mis.notes||'')}" onchange="updateMisc(${mis.id},'notes',this.value)" style="min-width:120px;" placeholder="optional note"></td>
+      <td><button class="btn btn-del" onclick="removeMiscItem(${mis.id})">&#10005;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  // Totals row
+  const tr = document.createElement('tr');
+  tr.style.background = '#fdf7ee';
+  tr.innerHTML = `
+    <td colspan="2" style="font-weight:700;font-size:0.7rem;text-transform:uppercase;text-align:right;">Total Misc Cost this shift</td>
+    <td class="calc-cell highlight" style="font-weight:700;">£${totalMisc.toFixed(2)}</td>
+    <td colspan="3"></td>
+  `;
+  tbody.appendChild(tr);
+  return totalMisc;
+}
+
 // ── RENDER SHOPPING ──
 function renderShopping() {
   const tbody = document.getElementById('shoppingBody');
@@ -667,12 +740,15 @@ function updateAll() {
   const { revenue, profit } = renderMenu();
   const cost = renderIngredients();
   renderShopping();
-  const margin = revenue > 0 ? (profit / revenue * 100) : 0;
+  const miscCost = renderMisc();
+  const totalProfit = profit - miscCost;
+  const margin = revenue > 0 ? (totalProfit / revenue * 100) : 0;
   document.getElementById('res-revenue').textContent = '£' + revenue.toFixed(2);
   document.getElementById('res-cost').textContent    = '£' + cost.toFixed(2);
-  document.getElementById('res-profit').textContent  = '£' + profit.toFixed(2);
+  document.getElementById('res-misc').textContent    = '£' + miscCost.toFixed(2);
+  document.getElementById('res-profit').textContent  = '£' + totalProfit.toFixed(2);
   document.getElementById('res-margin').textContent  = fmtP(margin);
-  document.getElementById('res-profit').parentElement.className = 'result-cell ' + (profit >= 0 ? 'profit' : 'loss');
+  document.getElementById('res-profit').parentElement.className = 'result-cell ' + (totalProfit >= 0 ? 'profit' : 'loss');
 }
 
 // ── MUTATIONS (all trigger scheduleSave) ──
@@ -682,6 +758,9 @@ function addMenuItem() { menuItems.push({id:nextMenuId++,name:'New Item',price:0
 function updateIng(id, field, val) { const i=ingredients.find(x=>x.id===id); if(i) i[field]=val; updateAll(); scheduleSave(); }
 function removeIngredient(id) { menuItems.forEach(m=>{ m.linkedIngIds=m.linkedIngIds.filter(x=>x!==id); }); ingredients=ingredients.filter(i=>i.id!==id); updateAll(); scheduleSave(); }
 function addIngredient() { ingredients.push({id:nextIngId++,name:'New Ingredient',unit:'unit',cost:0,portionsPerUnit:1}); updateAll(); scheduleSave(); document.querySelector('[data-tab="ingredients"]').click(); }
+function updateMisc(id, field, val) { const m=miscItems.find(x=>x.id===id); if(m) m[field]=val; updateAll(); scheduleSave(); }
+function removeMiscItem(id) { miscItems=miscItems.filter(m=>m.id!==id); updateAll(); scheduleSave(); }
+function addMiscItem() { miscItems.push({id:nextMiscId++,name:'New Expense',category:'Other',cost:0,type:'perShift',notes:''}); updateAll(); scheduleSave(); document.querySelector('[data-tab="misc"]').click(); }
 function unlinkIng(menuId, ingId) { const m=menuItems.find(x=>x.id===menuId); if(m) m.linkedIngIds=m.linkedIngIds.filter(x=>x!==ingId); updateAll(); scheduleSave(); }
 
 // ── MODAL ──
