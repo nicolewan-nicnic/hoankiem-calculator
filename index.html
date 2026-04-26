@@ -273,6 +273,28 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  /* ── SHOPPING CHECKLIST ── */
+  .shop-row.bought td { opacity: 0.38; text-decoration: line-through; }
+  .shop-row.bought { order: 2; }
+  .shop-check {
+    width: 18px; height: 18px; accent-color: var(--green);
+    cursor: pointer; flex-shrink: 0;
+  }
+  .shop-progress {
+    display: flex; align-items: center; gap: 0.7rem;
+    margin-bottom: 0.8rem; font-size: 0.72rem; color: var(--mid);
+  }
+  .shop-progress-bar {
+    flex: 1; height: 6px; background: var(--light);
+    border-radius: 999px; overflow: hidden;
+  }
+  .shop-progress-fill {
+    height: 100%; background: var(--green);
+    border-radius: 999px; transition: width 0.3s;
+  }
+  .shop-tbody { display: flex; flex-direction: column; }
+
 </style>
 </head>
 <body>
@@ -390,12 +412,19 @@
 
   <div id="tab-shopping" class="tab-panel">
     <div class="card">
-      <div class="card-header">&#128722; Shopping List <span class="tag">for this shift</span></div>
+      <div class="card-header">&#128722; Shopping List <span class="tag">for this shift</span>
+        <button class="btn" style="margin-left:auto;border-color:var(--border);color:var(--border);font-size:0.6rem;padding:0.2rem 0.6rem;" onclick="clearShoppingTicks()">Clear ticks</button>
+      </div>
       <div class="card-body">
+        <div class="shop-progress">
+          <span id="shopProgressLabel">0 of 0 bought</span>
+          <div class="shop-progress-bar"><div class="shop-progress-fill" id="shopProgressFill" style="width:0%"></div></div>
+        </div>
         <table>
           <thead><tr>
+            <th style="width:32px;">&#10003;</th>
             <th>Ingredient</th>
-            <th>Units Needed</th>
+            <th>Units</th>
             <th>Unit</th>
             <th>Cost/Unit</th>
             <th>Total Cost</th>
@@ -404,6 +433,7 @@
           <tbody id="shoppingBody"></tbody>
           <tfoot>
             <tr>
+              <td></td>
               <td colspan="4" style="font-weight:700;text-align:right;padding-top:0.7rem;font-size:0.7rem;letter-spacing:0.05em;text-transform:uppercase;">Total Spend</td>
               <td style="font-weight:700;color:var(--red);" id="shoppingTotal">&#163;0.00</td>
               <td></td>
@@ -430,7 +460,7 @@
           <tbody id="miscBody"></tbody>
         </table>
         <button class="btn btn-add" onclick="addMiscItem()">+ Add Expense</button>
-        <p class="notice">Type = "Per Shift" (fixed cost per shift) or "Per Portion" (multiplied by total portions sold). Both reduce your profit.</p>
+        <p class="notice">Type: <b>Per Shift (£)</b> = flat cost per shift · <b>Per Portion (£)</b> = cost × total portions · <b>% of Revenue</b> = e.g. 2% card reader fee applied to total revenue. All reduce your profit.</p>
       </div>
     </div>
   </div>
@@ -497,6 +527,7 @@ async function saveToFirebase() {
       nextMenuId: nextMenuId,
       nextIngId: nextIngId,
       nextMiscId: nextMiscId,
+      shoppingTicked: shoppingTicked,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('saved');
@@ -517,6 +548,7 @@ async function loadFromFirebase() {
       if (d.nextIngId)      nextIngId      = d.nextIngId;
     if (d.miscItems)      miscItems      = d.miscItems;
     if (d.nextMiscId)     nextMiscId     = d.nextMiscId;
+    if (d.shoppingTicked) shoppingTicked = d.shoppingTicked;
       if (d.shiftHours)     document.getElementById('shiftHours').value     = d.shiftHours;
       if (d.portionsPerHour) document.getElementById('portionsPerHour').value = d.portionsPerHour;
     }
@@ -563,9 +595,10 @@ let miscItems = [
   { id:2, name:'Packaging & Boxes',    category:'Packaging',  cost:0.30, type:'perPortion' },
   { id:3, name:'Napkins & Cutlery',    category:'Packaging',  cost:0.10, type:'perPortion' },
   { id:4, name:'Gas Canister',         category:'Equipment',  cost:8,    type:'perShift'   },
-  { id:5, name:'Card Reader Fee (2%)', category:'Fees',       cost:0,    type:'perShift', notes:'Edit to actual fee' },
+  { id:5, name:'Card Reader Fee',      category:'Fees',       cost:2,    type:'pctRevenue', notes:'2% of revenue' },
 ];
 let nextMiscId = 6;
+let shoppingTicked = {}; // ingId -> bool
 let modalTargetId = null, modalTempLinks = [];
 
 // ── HELPERS ──
@@ -669,23 +702,31 @@ function renderIngredients() {
 
 
 // ── RENDER MISC ──
-function renderMisc() {
+function renderMisc(revenue) {
   const tbody = document.getElementById('miscBody');
   tbody.innerHTML = '';
   const total = getTotalPortions();
+  const rev = revenue || 0;
   let totalMisc = 0;
   miscItems.forEach(mis => {
-    const effectiveCost = mis.type === 'perPortion' ? mis.cost * total : mis.cost;
+    let effectiveCost = mis.cost;
+    if (mis.type === 'perPortion') effectiveCost = mis.cost * total;
+    else if (mis.type === 'pctRevenue') effectiveCost = (mis.cost / 100) * rev;
     totalMisc += effectiveCost;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${esc(mis.name)}" onchange="updateMisc(${mis.id},'name',this.value)" style="min-width:160px;"></td>
       <td><input type="text" value="${esc(mis.category||'')}" onchange="updateMisc(${mis.id},'category',this.value)" style="width:100px;"></td>
-      <td><input type="number" value="${mis.cost}" min="0" step="0.01" onchange="updateMisc(${mis.id},'cost',+this.value)" style="width:70px;"></td>
+      <td style="white-space:nowrap;">
+        <input type="number" value="${mis.cost}" min="0" step="0.01" onchange="updateMisc(${mis.id},'cost',+this.value)" style="width:60px;">
+        ${mis.type==='pctRevenue'?'%':'£'}
+        <span style="color:var(--mid);font-size:0.65rem;">(=£${effectiveCost.toFixed(2)})</span>
+      </td>
       <td>
         <select onchange="updateMisc(${mis.id},'type',this.value)" style="font-family:var(--font-body);font-size:0.75rem;border:1px solid var(--border);background:var(--cream);padding:0.25rem 0.35rem;border-radius:2px;outline:none;color:var(--dark);">
-          <option value="perShift" ${mis.type==='perShift'?'selected':''}>Per Shift</option>
-          <option value="perPortion" ${mis.type==='perPortion'?'selected':''}>Per Portion</option>
+          <option value="perShift" ${mis.type==='perShift'?'selected':''}>Per Shift (£)</option>
+          <option value="perPortion" ${mis.type==='perPortion'?'selected':''}>Per Portion (£)</option>
+          <option value="pctRevenue" ${mis.type==='pctRevenue'?'selected':''}>% of Revenue</option>
         </select>
       </td>
       <td><input type="text" value="${esc(mis.notes||'')}" onchange="updateMisc(${mis.id},'notes',this.value)" style="min-width:120px;" placeholder="optional note"></td>
@@ -698,7 +739,7 @@ function renderMisc() {
   tr.style.background = '#fdf7ee';
   tr.innerHTML = `
     <td colspan="2" style="font-weight:700;font-size:0.7rem;text-transform:uppercase;text-align:right;">Total Misc Cost this shift</td>
-    <td class="calc-cell highlight" style="font-weight:700;">£${totalMisc.toFixed(2)}</td>
+    <td colspan="2" class="calc-cell highlight" style="font-weight:700;">£${totalMisc.toFixed(2)}</td>
     <td colspan="3"></td>
   `;
   tbody.appendChild(tr);
@@ -710,6 +751,8 @@ function renderShopping() {
   const tbody = document.getElementById('shoppingBody');
   tbody.innerHTML = '';
   let totalCost = 0;
+  // Build rows, split into pending and bought
+  const pending = [], bought = [];
   ingredients.forEach(ing => {
     const linkedItems = menuItems.filter(m => m.linkedIngIds.includes(ing.id));
     const portionsNeeded = linkedItems.reduce((s,m) => s + itemPortions(m), 0);
@@ -717,19 +760,44 @@ function renderShopping() {
     const unitsNeeded = Math.ceil(portionsNeeded / ing.portionsPerUnit);
     const cost = unitsNeeded * ing.cost;
     totalCost += cost;
+    const isBought = !!shoppingTicked[ing.id];
+    const row = { ing, unitsNeeded, cost, isBought };
+    isBought ? bought.push(row) : pending.push(row);
+  });
+  const allRows = [...pending, ...bought];
+  allRows.forEach(({ ing, unitsNeeded, cost, isBought }) => {
     const tr = document.createElement('tr');
+    tr.className = 'shop-row' + (isBought ? ' bought' : '');
     tr.innerHTML = `
+      <td style="text-align:center;">
+        <input type="checkbox" class="shop-check" ${isBought?'checked':''} onchange="toggleShoppingTick(${ing.id},this.checked)">
+      </td>
       <td style="font-weight:500;">${esc(ing.name)}</td>
       <td style="font-weight:700;">${unitsNeeded}</td>
       <td>${esc(ing.unit)}</td>
-      <td>${fmt(ing.cost)}</td>
-      <td class="calc-cell highlight">${fmt(cost)}</td>
+      <td>${fmt(ing.cost).replace('&#163;','£')}</td>
+      <td class="calc-cell highlight">${fmt(cost).replace('&#163;','£')}</td>
       <td style="font-size:0.68rem;color:var(--mid);">${usedInNames(ing.id).join(', ')}</td>
     `;
     tbody.appendChild(tr);
   });
-  document.getElementById('shoppingTotal').textContent = fmt(totalCost).replace('&#163;','£');
+  // Progress bar
+  const totalItems = allRows.length;
+  const boughtCount = bought.length;
+  document.getElementById('shopProgressLabel').textContent = `${boughtCount} of ${totalItems} bought`;
+  document.getElementById('shopProgressFill').style.width = totalItems > 0 ? (boughtCount/totalItems*100)+'%' : '0%';
+  document.getElementById('shoppingTotal').textContent = '£' + totalCost.toFixed(2);
   return totalCost;
+}
+function toggleShoppingTick(ingId, checked) {
+  shoppingTicked[ingId] = checked;
+  renderShopping();
+  scheduleSave();
+}
+function clearShoppingTicks() {
+  shoppingTicked = {};
+  renderShopping();
+  scheduleSave();
 }
 
 // ── MASTER UPDATE ──
@@ -740,7 +808,7 @@ function updateAll() {
   const { revenue, profit } = renderMenu();
   const cost = renderIngredients();
   renderShopping();
-  const miscCost = renderMisc();
+  const miscCost = renderMisc(revenue);
   const totalProfit = profit - miscCost;
   const margin = revenue > 0 ? (totalProfit / revenue * 100) : 0;
   document.getElementById('res-revenue').textContent = '£' + revenue.toFixed(2);
