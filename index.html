@@ -242,15 +242,18 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <div class="field-group"><label>Shift Name</label><input type="text" id="shiftName" value="Default" oninput="scheduleSave()"></div>
         <div class="field-group"><label>Date</label><input type="date" id="shiftDate" oninput="scheduleSave()"></div>
         <div class="field-group"><label>Shift Length (hrs)</label><input type="number" id="shiftHours" value="6" min="1" max="24" oninput="updateAll();scheduleSave()"></div>
-        <div class="field-group"><label>Portions per Hour</label><input type="number" id="portionsPerHour" value="13" min="1" oninput="updateAll();scheduleSave()"></div>
-        <div class="field-group"><label>Total Portions (auto)</label><input type="number" id="totalPortions" value="78" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
+        <div class="field-group"><label>Max Portions/hr <span style="font-size:0.55rem;opacity:0.6;">(capacity check)</span></label><input type="number" id="maxPortionsPerHour" value="20" min="1" oninput="updateAll();scheduleSave()"></div>
+        <div class="field-group"><label>Total Planned Portions</label><input type="number" id="totalPortions" value="0" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
+        <div class="field-group"><label>Implied Rate</label><input type="text" id="impliedRate" value="—" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
       </div>
+      <div id="capacityWarning" style="display:none;margin-top:0.65rem;padding:0.45rem 0.75rem;background:#fef3e2;border:1px solid var(--gold);border-radius:2px;font-size:0.68rem;color:var(--mid);"></div>
     </div>
   </div>
 
   <!-- Results bar -->
   <div class="results-bar">
-    <div class="result-cell"><div class="val" id="res-portions">78</div><div class="lbl">Planned Portions</div></div>
+    <div class="result-cell"><div class="val" id="res-portions">0</div><div class="lbl">Planned Portions</div></div>
+    <div class="result-cell"><div class="val" id="res-rate">—</div><div class="lbl">Portions/hr</div></div>
     <div class="result-cell"><div class="val" id="res-revenue">£0</div><div class="lbl">Est. Revenue</div></div>
     <div class="result-cell"><div class="val" id="res-cost">£0</div><div class="lbl">Ingredient Cost</div></div>
     <div class="result-cell"><div class="val" id="res-misc">£0</div><div class="lbl">Misc Costs</div></div>
@@ -276,14 +279,14 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <table>
           <thead><tr>
             <th style="min-width:140px;">Item</th><th>Price (£)</th>
-            <th>Proportion <span style="font-weight:400;opacity:0.6;">(auto%)</span></th>
-            <th>Portions</th><th>Cost/Portion</th><th>Revenue</th><th>Profit</th>
+            <th>Est. Portions <span style="font-weight:400;opacity:0.6;">to sell</span></th>
+            <th>Cost/Portion</th><th>Revenue</th><th>Profit</th>
             <th>Linked Ingredients</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="menuBody"></tbody>
         </table>
         <button class="btn btn-add" onclick="addMenuItem()">+ Add Item</button>
-        <p class="notice">Enter a proportion for each item — % share is calculated automatically. Archived items are excluded from calculations.</p>
+        <p class="notice">Enter the planned number of portions for each item. Total portions and revenue are calculated automatically. Archived items are excluded.</p>
       </div>
     </div>
   </div>
@@ -384,7 +387,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         </div>
         <table id="actualsTable">
           <thead><tr>
-            <th>Item</th><th>Planned Portions</th><th>Actual Portions</th><th>Price</th><th>Planned Rev.</th><th>Actual Rev.</th><th>Diff</th>
+            <th>Item</th><th>Est. Portions <span style="font-weight:400;opacity:0.6;">to sell</span></th><th>Actual Portions</th><th>Price</th><th>Planned Rev.</th><th>Actual Rev.</th><th>Diff</th>
           </tr></thead>
           <tbody id="actualsBody"></tbody>
           <tfoot id="actualsFoot"></tfoot>
@@ -514,7 +517,7 @@ async function saveDefault(){
       shiftName:document.getElementById('shiftName').value,
       shiftDate:document.getElementById('shiftDate').value,
       shiftHours:getShiftHours(),
-      portionsPerHour:getPortionsPerHour(),
+      maxPortionsPerHour:getMaxPortionsPerHour(),
       menuItems,ingredients,miscItems,bringItems,
       nextMenuId,nextIngId,nextMiscId,nextBringId,
       shoppingTicked,bringTicked,
@@ -534,7 +537,7 @@ async function loadDefault(){
       if(d.shiftName) document.getElementById('shiftName').value=d.shiftName;
       if(d.shiftDate) document.getElementById('shiftDate').value=d.shiftDate;
       if(d.shiftHours) document.getElementById('shiftHours').value=d.shiftHours;
-      if(d.portionsPerHour) document.getElementById('portionsPerHour').value=d.portionsPerHour;
+      if(d.maxPortionsPerHour) document.getElementById('maxPortionsPerHour').value=d.maxPortionsPerHour;
       if(d.menuItems) menuItems=d.menuItems;
       if(d.ingredients) ingredients=d.ingredients;
       if(d.miscItems) miscItems=d.miscItems;
@@ -561,14 +564,14 @@ async function loadDefault(){
 
 // ── DEFAULT DATA ──
 let menuItems=[
-  {id:1,name:'Lemongrass Chicken + Rice',   price:13,proportion:4,linkedIngIds:[4,3,1,7,9,13],archived:false},
-  {id:2,name:'Lemongrass Chicken + Noodles',price:13,proportion:3,linkedIngIds:[4,2,1,7,9,13],archived:false},
-  {id:3,name:'Lemongrass Pork + Rice',       price:13,proportion:4,linkedIngIds:[5,3,1,7,9,13],archived:false},
-  {id:4,name:'Lemongrass Pork + Noodles',    price:13,proportion:3,linkedIngIds:[5,2,1,7,9,13],archived:false},
-  {id:5,name:'Fried Chicken Wings',           price:6, proportion:3,linkedIngIds:[6,8,9],        archived:false},
-  {id:6,name:'Iced Coffee',                   price:3, proportion:1,linkedIngIds:[10],            archived:false},
-  {id:7,name:'Lemonade',                      price:3, proportion:1,linkedIngIds:[11],            archived:false},
-  {id:8,name:'Tiramisu',                      price:5, proportion:1,linkedIngIds:[12],            archived:false},
+  {id:1,name:'Lemongrass Chicken + Rice',   price:13,plannedPortions:15,linkedIngIds:[4,3,1,7,9,13],archived:false},
+  {id:2,name:'Lemongrass Chicken + Noodles',price:13,plannedPortions:10,linkedIngIds:[4,2,1,7,9,13],archived:false},
+  {id:3,name:'Lemongrass Pork + Rice',       price:13,plannedPortions:15,linkedIngIds:[5,3,1,7,9,13],archived:false},
+  {id:4,name:'Lemongrass Pork + Noodles',    price:13,plannedPortions:10,linkedIngIds:[5,2,1,7,9,13],archived:false},
+  {id:5,name:'Fried Chicken Wings',           price:6, plannedPortions:10,linkedIngIds:[6,8,9],        archived:false},
+  {id:6,name:'Iced Coffee',                   price:3, plannedPortions:5,linkedIngIds:[10],            archived:false},
+  {id:7,name:'Lemonade',                      price:3, plannedPortions:5,linkedIngIds:[11],            archived:false},
+  {id:8,name:'Tiramisu',                      price:5, plannedPortions:5,linkedIngIds:[12],            archived:false},
 ];
 let ingredients=[
   {id:1, name:'Romaine Lettuce', unit:'bag',     cost:1.50,portionsPerUnit:5, archived:false},
@@ -609,9 +612,8 @@ let modalTargetId=null,modalTempLinks=[];
 let pendingShiftSave=null; // {type,existingId}
 
 // ── HELPERS ──
-const getShiftHours      = ()=>parseFloat(document.getElementById('shiftHours').value)||6;
-const getPortionsPerHour = ()=>parseFloat(document.getElementById('portionsPerHour').value)||13;
-const getTotalPortions   = ()=>Math.round(getShiftHours()*getPortionsPerHour());
+const getShiftHours         = ()=>parseFloat(document.getElementById('shiftHours').value)||6;
+const getMaxPortionsPerHour = ()=>parseFloat(document.getElementById('maxPortionsPerHour').value)||20;
 const getActualMode      = ()=>document.querySelector('[name="actualMode"]:checked')?.value||'portions';
 const getActualTotalRevenue=()=>parseFloat(document.getElementById('actualTotalRevenue').value)||0;
 const fmt  = n=>'£'+n.toFixed(2);
@@ -621,8 +623,8 @@ const activeMenuItems = ()=>menuItems.filter(m=>!m.archived);
 const activeIngredients= ()=>ingredients.filter(i=>!i.archived);
 const activeMiscItems  = ()=>miscItems.filter(m=>!m.archived);
 const ingCostPP  = ing=>ing.portionsPerUnit>0?ing.cost/ing.portionsPerUnit:0;
-const totalProportion=()=>activeMenuItems().reduce((s,m)=>s+(m.proportion||1),0);
-const itemPortions=item=>{const tp=totalProportion();return tp>0?Math.round(getTotalPortions()*(item.proportion||1)/tp):0;};
+const getTotalPortions=()=>activeMenuItems().reduce((s,m)=>s+(m.plannedPortions||0),0);
+const itemPortions=item=>item.plannedPortions||0;
 const itemCostPP =item=>item.linkedIngIds.reduce((s,id)=>{const i=ingredients.find(x=>x.id===id&&!x.archived);return i?s+ingCostPP(i):s;},0);
 const usedInNames=ingId=>activeMenuItems().filter(m=>m.linkedIngIds.includes(ingId)).map(m=>m.name);
 const archiveBtn=(id,arr,type)=>{
@@ -637,16 +639,14 @@ const archiveBtn=(id,arr,type)=>{
 function renderMenu(){
   const tbody=document.getElementById('menuBody');
   tbody.innerHTML='';
-  const tp=totalProportion();
-  let totalRev=0,totalProfit=0;
+  let totalRev=0,totalProfit=0,totalPortions=0;
   menuItems.forEach(item=>{
     const isArch=item.archived;
     const portions=isArch?0:itemPortions(item);
-    const autoPct=(!isArch&&tp>0)?((item.proportion||1)/tp*100):0;
     const costPP=isArch?0:itemCostPP(item);
     const rev=portions*item.price;
     const profit=rev-costPP*portions;
-    if(!isArch){totalRev+=rev;totalProfit+=profit;}
+    if(!isArch){totalRev+=rev;totalProfit+=profit;totalPortions+=portions;}
     const chipsHtml=item.linkedIngIds.map(id=>{
       const ing=ingredients.find(x=>x.id===id);
       return ing?`<span class="chip">${esc(ing.name)}<button class="chip-del" onclick="unlinkIng(${item.id},${id})">&#215;</button></span>`:'';
@@ -656,11 +656,9 @@ function renderMenu(){
     tr.innerHTML=`
       <td><input type="text" value="${esc(item.name)}" onchange="updateMenu(${item.id},'name',this.value)" style="min-width:130px;"></td>
       <td><input type="number" value="${item.price}" min="0" step="0.5" onchange="updateMenu(${item.id},'price',+this.value)" style="width:50px;"></td>
-      <td style="white-space:nowrap;">
-        <input type="number" value="${item.proportion||1}" min="0" step="1" onchange="updateMenu(${item.id},'proportion',+this.value)" style="width:42px;" ${isArch?'disabled':''}>
-        ${!isArch?`<span style="color:var(--border);font-size:0.62rem;margin-left:0.2rem;">(${autoPct.toFixed(1)}%)</span>`:''}
+      <td>
+        <input type="number" value="${item.plannedPortions||0}" min="0" step="1" onchange="updateMenu(${item.id},'plannedPortions',+this.value)" style="width:55px;" ${isArch?'disabled':''}>
       </td>
-      <td class="calc-cell">${isArch?'—':portions}</td>
       <td class="calc-cell ${!isArch&&costPP>0?'highlight':''}">${isArch?'—':fmt(costPP)}</td>
       <td class="calc-cell highlight">${isArch?'—':fmt(rev)}</td>
       <td class="${!isArch?(profit>=0?'pos':'neg'):''}">${isArch?'—':fmt(profit)}</td>
@@ -673,8 +671,8 @@ function renderMenu(){
   const totTr=document.createElement('tr');
   totTr.style.background='#fdf7ee';
   totTr.innerHTML=`<td style="font-weight:700;font-size:0.68rem;text-transform:uppercase;">TOTAL</td><td></td>
-    <td class="calc-cell" style="color:var(--border);font-size:0.62rem;">${tp} parts</td>
-    <td class="calc-cell" style="font-weight:700;">${getTotalPortions()}</td><td></td>
+    <td class="calc-cell" style="font-weight:700;">${totalPortions}</td>
+    <td></td>
     <td class="calc-cell highlight" style="font-weight:700;">${fmt(totalRev)}</td>
     <td class="${totalProfit>=0?'pos':'neg'}">${fmt(totalProfit)}</td>
     <td colspan="3"></td>`;
@@ -842,7 +840,7 @@ function renderActuals(plannedRevenue){
   tbody.innerHTML='';
   let totalPlanned=0,totalActualRev=0;
   activeMenuItems().forEach(item=>{
-    const planned=itemPortions(item);
+    const planned=item.plannedPortions||0;
     const actual=actualPortions[item.id]||0;
     const plannedRev=planned*item.price;
     const actualRev=actual*item.price;
@@ -896,10 +894,10 @@ function renderActuals(plannedRevenue){
 
 // ── MASTER UPDATE ──
 function updateAll(){
+  const {revenue,profit}=renderMenu();
   const total=getTotalPortions();
   document.getElementById('totalPortions').value=total;
   document.getElementById('res-portions').textContent=total;
-  const {revenue,profit}=renderMenu();
   const cost=renderIngredients();
   renderShopping();
   const miscCost=renderMisc(revenue);
@@ -919,7 +917,7 @@ function updateAll(){
 // ── MUTATIONS ──
 function updateMenu(id,f,v){const m=menuItems.find(x=>x.id===id);if(m)m[f]=v;updateAll();scheduleSave();}
 function removeMenuItem(id){menuItems=menuItems.filter(m=>m.id!==id);updateAll();scheduleSave();}
-function addMenuItem(){menuItems.push({id:nextMenuId++,name:'New Item',price:0,proportion:1,linkedIngIds:[],archived:false});updateAll();scheduleSave();}
+function addMenuItem(){menuItems.push({id:nextMenuId++,name:'New Item',price:0,plannedPortions:0,linkedIngIds:[],archived:false});updateAll();scheduleSave();}
 function menuArchive(id,v){const m=menuItems.find(x=>x.id===id);if(m)m.archived=v;updateAll();scheduleSave();}
 
 function updateIng(id,f,v){const i=ingredients.find(x=>x.id===id);if(i)i[f]=v;updateAll();scheduleSave();}
@@ -1050,7 +1048,7 @@ function renderShiftGrid(gridId,list){
 function snapshotCurrentState(extraFields={}){
   return {
     shiftHours:getShiftHours(),
-    portionsPerHour:getPortionsPerHour(),
+    maxPortionsPerHour:getMaxPortionsPerHour(),
     menuItems:JSON.parse(JSON.stringify(menuItems)),
     ingredients:JSON.parse(JSON.stringify(ingredients)),
     miscItems:JSON.parse(JSON.stringify(miscItems)),
@@ -1067,7 +1065,7 @@ function snapshotCurrentState(extraFields={}){
 
 function loadStateFromSnapshot(d){
   if(d.shiftHours) document.getElementById('shiftHours').value=d.shiftHours;
-  if(d.portionsPerHour) document.getElementById('portionsPerHour').value=d.portionsPerHour;
+  if(d.maxPortionsPerHour) document.getElementById('maxPortionsPerHour').value=d.maxPortionsPerHour;
   if(d.menuItems) menuItems=d.menuItems;
   if(d.ingredients) ingredients=d.ingredients;
   if(d.miscItems) miscItems=d.miscItems;
@@ -1215,12 +1213,11 @@ function renderCompare(){
 
   function shiftStats(s){
     if(!s) return null;
-    const tot=Math.round((s.shiftHours||6)*(s.portionsPerHour||13));
+    const tot=((s.menuItems||[]).filter(m=>!m.archived).reduce((a,m)=>a+(m.plannedPortions||0),0));
     const menu=(s.menuItems||[]).filter(m=>!m.archived);
     const ings=(s.ingredients||[]).filter(i=>!i.archived);
     const misc=(s.miscItems||[]).filter(m=>!m.archived);
-    const tp=menu.reduce((a,m)=>a+(m.proportion||1),0);
-    const iP=item=>tp>0?Math.round(tot*(item.proportion||1)/tp):0;
+    const iP=item=>item.plannedPortions||0;
     const iCPP=item=>item.linkedIngIds.reduce((a,id)=>{const i=ings.find(x=>x.id===id);return i?a+(i.portionsPerUnit>0?i.cost/i.portionsPerUnit:0):a;},0);
     let rev=0,profit=0,ingCost=0;
     menu.forEach(m=>{const p=iP(m);rev+=p*m.price;profit+=p*(m.price-iCPP(m));});
@@ -1264,7 +1261,7 @@ function renderCompare(){
         <div class="compare-stat"><span class="cs-label">Margin</span><span class="cs-val">${fmtPP(s.margin)}</span></div>
         ${s.actualRev>0?`<div class="compare-stat"><span class="cs-label">Actual Revenue</span><span class="cs-val pos">${fmtC(s.actualRev)}</span></div>`:''}
         ${s.menu.length>0?`<div style="margin-top:0.75rem;font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--mid);margin-bottom:0.35rem;">Menu Mix</div>`:''}
-        ${s.menu.map(m=>`<div class="compare-stat"><span class="cs-label">${esc(m.name)}</span><span class="cs-val">${m.proportion||1} parts</span></div>`).join('')}
+        ${s.menu.map(m=>`<div class="compare-stat"><span class="cs-label">${esc(m.name)}</span><span class="cs-val">${m.plannedPortions||0} portions</span></div>`).join('')}
       </div>
     </div>`;
   }
@@ -1288,7 +1285,7 @@ function exportToCSV(){
   ];
   ingredients.forEach(i=>rows.push(['"'+i.name+'"','"'+i.unit+'"',i.cost,i.portionsPerUnit,i.archived?'yes':'no']));
   rows.push([],['"=== MENU ITEMS ==="'],['"Item"','"Price"','"Proportion"','"Archived"']);
-  menuItems.forEach(m=>rows.push(['"'+m.name+'"',m.price,m.proportion||1,m.archived?'yes':'no']));
+  menuItems.forEach(m=>rows.push(['"'+m.name+'"',m.price,m.plannedPortions||0,m.archived?'yes':'no']));
   rows.push([],['"=== MISC EXPENSES ==="'],['"Name"','"Category"','"Cost"','"Type"','"Archived"','"Notes"']);
   miscItems.forEach(m=>rows.push(['"'+m.name+'"','"'+(m.category||'')+'"',m.cost,'"'+m.type+'"',m.archived?'yes':'no','"'+(m.notes||'')+'"']));
   rows.push([],['"=== BRING LIST ==="'],['"Item"','"Category"','"Qty"','"Notes"','"Archived"']);
@@ -1313,7 +1310,7 @@ function importFromCSV(input){
       lines.forEach((l,i)=>{if(l.includes('=== INGREDIENTS'))sec=i;});
       if(sec>=0){const ni=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Ingredient')break;ni.push({id:id++,name:r[0],unit:r[1]||'unit',cost:parseFloat(r[2])||0,portionsPerUnit:parseFloat(r[3])||1,archived:r[4]==='yes'});}if(ni.length){ingredients=ni;nextIngId=id;}}
       lines.forEach((l,i)=>{if(l.includes('=== MENU ITEMS'))sec=i;});
-      if(sec>=0){const nm=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Item')break;nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,proportion:parseFloat(r[2])||1,archived:r[3]==='yes',linkedIngIds:[]});}if(nm.length){menuItems=nm;nextMenuId=id;}}
+      if(sec>=0){const nm=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Item')break;nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,plannedPortions:parseFloat(r[2])||0,archived:r[3]==='yes',linkedIngIds:[]});}if(nm.length){menuItems=nm;nextMenuId=id;}}
       updateAll();scheduleSave();alert('Imported!');
     }catch(err){alert('Import failed.');console.error(err);}
     input.value='';
