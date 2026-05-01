@@ -182,12 +182,80 @@ tr.archived-row td:nth-last-child(2){opacity:1;text-decoration:none;}
 @keyframes spin{to{transform:rotate(360deg);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
 footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--border);}
-@media(max-width:700px){
-  .settings-grid{grid-template-columns:1fr 1fr;}
-  .results-bar{grid-template-columns:1fr 1fr;}
-  td,th{padding:0.28rem 0.28rem;}
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:768px){
+  /* Header */
+  header{padding:0.9rem 1rem;gap:0.75rem;}
+  .logo-wrap{width:44px;height:44px;}
+  .header-text h1{font-size:1.1rem;}
   .header-actions{display:none;}
+
+  /* Nav */
+  .nav-tab{padding:0.5rem 0.75rem;font-size:0.6rem;letter-spacing:0.06em;}
+
+  /* Container */
+  .container{padding:0.75rem 0.65rem;}
+
+  /* Settings */
+  .settings-grid{grid-template-columns:1fr 1fr;}
+  #hourlyPrediction .field-group{min-width:120px;}
+
+  /* Results bar — 2 col on mobile */
+  .results-bar{grid-template-columns:1fr 1fr;}
+  .result-cell .val{font-size:1.05rem;}
+  .result-cell .lbl{font-size:0.5rem;}
+  .result-cell{padding:0.6rem 0.5rem;}
+
+  /* Tabs — scrollable */
+  .tabs,.nav-bar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tab{font-size:0.6rem;padding:0.45rem 0.65rem;white-space:nowrap;}
+
+  /* Tables — horizontal scroll container */
+  .card-body{padding:0.65rem;}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -0.65rem;padding:0 0.65rem;}
+  table{min-width:500px;font-size:0.72rem;}
+  th{font-size:0.52rem;padding:0.4rem 0.4rem;}
+  td{padding:0.32rem 0.38rem;}
+
+  /* Make inputs in tables smaller */
+  table input[type="text"],table input[type="number"]{font-size:0.7rem;padding:0.2rem 0.28rem;}
+  table select{font-size:0.7rem;padding:0.2rem 0.28rem;}
+
+  /* Chip text smaller */
+  .chip{font-size:0.55rem;}
+  .link-chips{min-width:80px;}
+
+  /* Bring list + shopping progress */
+  .shop-progress{font-size:0.65rem;}
+
+  /* Compare */
   .compare-grid{grid-template-columns:1fr;}
+
+  /* Buttons */
+  .btn{font-size:0.6rem;padding:0.35rem 0.55rem;}
+  .btn-add{font-size:0.62rem;}
+
+  /* Shift cards */
+  .shift-grid{grid-template-columns:1fr;}
+  .shift-card .sc-name{font-size:0.9rem;}
+
+  /* Actuals summary */
+  #actualsSummary>div{grid-template-columns:1fr 1fr;}
+
+  /* Hourly prediction chips */
+  #hourlyPredictionBody>div{min-width:calc(50% - 0.4rem) !important;flex:1;}
+
+  /* Modal */
+  .modal{padding:1rem;margin:1rem;}
+
+  /* Active banner */
+  #activeBanner{font-size:0.62rem;}
+}
+
+@media(max-width:420px){
+  .settings-grid{grid-template-columns:1fr;}
+  .results-bar{grid-template-columns:1fr 1fr;}
+  #hourlyPredictionBody>div{min-width:100% !important;}
 }
 </style>
 </head>
@@ -242,18 +310,21 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <div class="field-group"><label>Shift Name</label><input type="text" id="shiftName" value="Default" oninput="scheduleSave()"></div>
         <div class="field-group"><label>Date</label><input type="date" id="shiftDate" oninput="scheduleSave()"></div>
         <div class="field-group"><label>Shift Length (hrs)</label><input type="number" id="shiftHours" value="6" min="1" max="24" oninput="updateAll();scheduleSave()"></div>
-        <div class="field-group"><label>Max Portions/hr <span style="font-size:0.55rem;opacity:0.6;">(capacity check)</span></label><input type="number" id="maxPortionsPerHour" value="20" min="1" oninput="updateAll();scheduleSave()"></div>
         <div class="field-group"><label>Total Planned Portions</label><input type="number" id="totalPortions" value="0" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
-        <div class="field-group"><label>Implied Rate</label><input type="text" id="impliedRate" value="—" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
+        <div class="field-group"><label>Items Sold / Hour <span style="font-size:0.55rem;opacity:0.6;">(predicted)</span></label><input type="text" id="impliedRate" value="—" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
       </div>
-      <div id="capacityWarning" style="display:none;margin-top:0.65rem;padding:0.45rem 0.75rem;background:#fef3e2;border:1px solid var(--gold);border-radius:2px;font-size:0.68rem;color:var(--mid);"></div>
+      <!-- Per-item hourly prediction table -->
+      <div id="hourlyPrediction" style="margin-top:0.85rem;">
+        <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--mid);margin-bottom:0.4rem;">Predicted sales per hour, per item</div>
+        <div id="hourlyPredictionBody" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+      </div>
     </div>
   </div>
 
   <!-- Results bar -->
   <div class="results-bar">
     <div class="result-cell"><div class="val" id="res-portions">0</div><div class="lbl">Planned Portions</div></div>
-    <div class="result-cell"><div class="val" id="res-rate">—</div><div class="lbl">Portions/hr</div></div>
+    <div class="result-cell"><div class="val" id="res-rate">—</div><div class="lbl">Items/hr</div></div>
     <div class="result-cell"><div class="val" id="res-revenue">£0</div><div class="lbl">Est. Revenue</div></div>
     <div class="result-cell"><div class="val" id="res-cost">£0</div><div class="lbl">Ingredient Cost</div></div>
     <div class="result-cell"><div class="val" id="res-misc">£0</div><div class="lbl">Misc Costs</div></div>
@@ -276,7 +347,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
     <div class="card">
       <div class="card-header">&#127836; Menu Items <span class="tag">prices · mix · links</span></div>
       <div class="card-body">
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr>
             <th style="min-width:140px;">Item</th><th>Price (£)</th>
             <th>Est. Portions <span style="font-weight:400;opacity:0.6;">to sell</span></th>
@@ -285,6 +356,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
           </tr></thead>
           <tbody id="menuBody"></tbody>
         </table>
+        </table></div>
         <button class="btn btn-add" onclick="addMenuItem()">+ Add Item</button>
         <p class="notice">Enter the planned number of portions for each item. Total portions and revenue are calculated automatically. Archived items are excluded.</p>
       </div>
@@ -296,13 +368,14 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
     <div class="card">
       <div class="card-header">&#127807; Ingredients <span class="tag">costs · ratios</span></div>
       <div class="card-body">
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr>
             <th>Ingredient</th><th>Unit</th><th>Cost/Unit (£)</th><th>Portions/Unit</th>
             <th>Cost/Portion</th><th>Units Needed</th><th>Total Cost</th><th>Used In</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="ingredientBody"></tbody>
         </table>
+        </table></div>
         <button class="btn btn-add" onclick="addIngredient()">+ Add Ingredient</button>
       </div>
     </div>
@@ -319,7 +392,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
           <span id="shopProgressLabel">0 of 0 bought</span>
           <div class="shop-progress-bar"><div class="shop-progress-fill" id="shopProgressFill" style="width:0%"></div></div>
         </div>
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr><th style="width:28px;">&#10003;</th><th>Ingredient</th><th>Units</th><th>Unit</th><th>Cost/Unit</th><th>Total Cost</th><th>Used In</th></tr></thead>
           <tbody id="shoppingBody"></tbody>
           <tfoot><tr>
@@ -336,12 +409,13 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
     <div class="card">
       <div class="card-header">&#128181; Misc Expenses <span class="tag">overheads · fees · packaging</span></div>
       <div class="card-body">
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr>
             <th style="min-width:160px;">Expense</th><th>Category</th><th>Cost</th><th>Type</th><th>Effective Cost</th><th>Notes</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="miscBody"></tbody>
         </table>
+        </table></div>
         <button class="btn btn-add" onclick="addMiscItem()">+ Add Expense</button>
         <p class="notice"><b>Per Shift (£)</b> = flat cost · <b>Per Portion (£)</b> = cost × portions · <b>% of Revenue</b> = e.g. card reader fee</p>
       </div>
@@ -359,10 +433,11 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
           <span id="bringProgressLabel">0 of 0 packed</span>
           <div class="shop-progress-bar"><div class="shop-progress-fill" id="bringProgressFill" style="width:0%"></div></div>
         </div>
-        <table>
+        <div class="table-scroll"><table>
           <thead><tr><th style="width:28px;">&#10003;</th><th>Item</th><th>Category</th><th>Qty</th><th>Notes</th><th>Status</th><th></th></tr></thead>
           <tbody id="bringBody"></tbody>
         </table>
+        </table></div>
         <button class="btn btn-add" onclick="addBringItem()">+ Add Item</button>
       </div>
     </div>
@@ -385,13 +460,13 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
             <input type="radio" name="actualMode" value="both" onchange="updateActualMode()"> Both
           </label>
         </div>
-        <table id="actualsTable">
+        <div class="table-scroll"><table id="actualsTable">
           <thead><tr>
             <th>Item</th><th>Est. Portions <span style="font-weight:400;opacity:0.6;">to sell</span></th><th>Actual Portions</th><th>Price</th><th>Planned Rev.</th><th>Actual Rev.</th><th>Diff</th>
           </tr></thead>
           <tbody id="actualsBody"></tbody>
           <tfoot id="actualsFoot"></tfoot>
-        </table>
+        </table></div>
         <div id="actualRevenueRow" style="display:none;margin-top:1rem;">
           <div class="field-group" style="max-width:250px;">
             <label>Total Actual Revenue (£)</label>
