@@ -592,7 +592,6 @@ async function saveDefault(){
       shiftName:document.getElementById('shiftName').value,
       shiftDate:document.getElementById('shiftDate').value,
       shiftHours:getShiftHours(),
-      maxPortionsPerHour:getMaxPortionsPerHour(),
       menuItems,ingredients,miscItems,bringItems,
       nextMenuId,nextIngId,nextMiscId,nextBringId,
       shoppingTicked,bringTicked,
@@ -602,7 +601,11 @@ async function saveDefault(){
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('saved');
-  }catch(e){console.error(e);setSyncStatus('error');}
+  }catch(e){
+    console.error('Firestore save error:',e);
+    setSyncStatus('error');
+    document.getElementById('syncLabel').textContent='Save failed: '+e.message;
+  }
 }
 async function loadDefault(){
   try{
@@ -612,7 +615,6 @@ async function loadDefault(){
       if(d.shiftName) document.getElementById('shiftName').value=d.shiftName;
       if(d.shiftDate) document.getElementById('shiftDate').value=d.shiftDate;
       if(d.shiftHours) document.getElementById('shiftHours').value=d.shiftHours;
-      if(d.maxPortionsPerHour) document.getElementById('maxPortionsPerHour').value=d.maxPortionsPerHour;
       if(d.menuItems) menuItems=d.menuItems;
       if(d.ingredients) ingredients=d.ingredients;
       if(d.miscItems) miscItems=d.miscItems;
@@ -631,7 +633,11 @@ async function loadDefault(){
       if(d.activeShiftId) activeShiftId=d.activeShiftId;
     }
     setSyncStatus('saved');
-  }catch(e){console.error(e);setSyncStatus('error');}
+  }catch(e){
+    console.error('Firestore save error:',e);
+    setSyncStatus('error');
+    document.getElementById('syncLabel').textContent='Save failed: '+e.message;
+  }
   finally{document.getElementById('loadingOverlay').style.display='none';}
   updateAll();
   await loadShifts();
@@ -688,7 +694,6 @@ let pendingShiftSave=null; // {type,existingId}
 
 // ── HELPERS ──
 const getShiftHours         = ()=>parseFloat(document.getElementById('shiftHours').value)||6;
-const getMaxPortionsPerHour = ()=>parseFloat(document.getElementById('maxPortionsPerHour').value)||20;
 const getActualMode      = ()=>document.querySelector('[name="actualMode"]:checked')?.value||'portions';
 const getActualTotalRevenue=()=>parseFloat(document.getElementById('actualTotalRevenue').value)||0;
 const fmt  = n=>'£'+n.toFixed(2);
@@ -1123,7 +1128,6 @@ function renderShiftGrid(gridId,list){
 function snapshotCurrentState(extraFields={}){
   return {
     shiftHours:getShiftHours(),
-    maxPortionsPerHour:getMaxPortionsPerHour(),
     menuItems:JSON.parse(JSON.stringify(menuItems)),
     ingredients:JSON.parse(JSON.stringify(ingredients)),
     miscItems:JSON.parse(JSON.stringify(miscItems)),
@@ -1140,7 +1144,6 @@ function snapshotCurrentState(extraFields={}){
 
 function loadStateFromSnapshot(d){
   if(d.shiftHours) document.getElementById('shiftHours').value=d.shiftHours;
-  if(d.maxPortionsPerHour) document.getElementById('maxPortionsPerHour').value=d.maxPortionsPerHour;
   if(d.menuItems) menuItems=d.menuItems;
   if(d.ingredients) ingredients=d.ingredients;
   if(d.miscItems) miscItems=d.miscItems;
