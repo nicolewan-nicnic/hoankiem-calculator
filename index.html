@@ -588,57 +588,73 @@ function setSyncStatus(s){
 function scheduleSave(){clearTimeout(saveTimer);setSyncStatus('saving');saveTimer=setTimeout(saveDefault,900);}
 async function saveDefault(){
   try{
-    await DEFAULT_DOC.set({
-      shiftName:document.getElementById('shiftName').value,
-      shiftDate:document.getElementById('shiftDate').value,
+    const payload = {
+      shiftName:document.getElementById('shiftName').value||'Default',
+      shiftDate:document.getElementById('shiftDate').value||'',
       shiftHours:getShiftHours(),
-      menuItems,ingredients,miscItems,bringItems,
+      menuItems:JSON.parse(JSON.stringify(menuItems)),
+      ingredients:JSON.parse(JSON.stringify(ingredients)),
+      miscItems:JSON.parse(JSON.stringify(miscItems)),
+      bringItems:JSON.parse(JSON.stringify(bringItems)),
       nextMenuId,nextIngId,nextMiscId,nextBringId,
-      shoppingTicked,bringTicked,
-      actualPortions,actualTotalRevenue:getActualTotalRevenue(),
+      shoppingTicked:{...shoppingTicked},
+      bringTicked:{...bringTicked},
+      actualPortions:{...actualPortions},
+      actualTotalRevenue:getActualTotalRevenue(),
       actualMode:getActualMode(),
-      activeShiftId,
+      activeShiftId:activeShiftId||null,
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    console.log('Saving to Firebase — items:',payload.menuItems.length,'ings:',payload.ingredients.length,'misc:',payload.miscItems.length,'bring:',payload.bringItems.length);
+    await DEFAULT_DOC.set(payload);
     setSyncStatus('saved');
   }catch(e){
-    console.error('Firestore save error:',e);
+    console.error('Firebase save error:',e);
     setSyncStatus('error');
     document.getElementById('syncLabel').textContent='Save failed: '+e.message;
   }
 }
 async function loadDefault(){
   try{
+    console.log('Loading from Firebase...');
     const doc=await DEFAULT_DOC.get();
     if(doc.exists){
       const d=doc.data();
+      console.log('Firebase data found:', Object.keys(d));
+      // Settings
       if(d.shiftName) document.getElementById('shiftName').value=d.shiftName;
       if(d.shiftDate) document.getElementById('shiftDate').value=d.shiftDate;
       if(d.shiftHours) document.getElementById('shiftHours').value=d.shiftHours;
-      if(d.menuItems) menuItems=d.menuItems;
-      if(d.ingredients) ingredients=d.ingredients;
-      if(d.miscItems) miscItems=d.miscItems;
-      if(d.bringItems) bringItems=d.bringItems;
-      if(d.nextMenuId) nextMenuId=d.nextMenuId;
-      if(d.nextIngId) nextIngId=d.nextIngId;
-      if(d.nextMiscId) nextMiscId=d.nextMiscId;
-      if(d.nextBringId) nextBringId=d.nextBringId;
-      if(d.shoppingTicked) shoppingTicked=d.shoppingTicked;
-      if(d.bringTicked) bringTicked=d.bringTicked;
-      if(d.actualPortions) actualPortions=d.actualPortions;
+      // Arrays — always restore if present and valid
+      if(Array.isArray(d.menuItems) && d.menuItems.length>0){ menuItems=d.menuItems; console.log('Restored menuItems:',menuItems.length); }
+      if(Array.isArray(d.ingredients) && d.ingredients.length>0){ ingredients=d.ingredients; console.log('Restored ingredients:',ingredients.length); }
+      if(Array.isArray(d.miscItems) && d.miscItems.length>0){ miscItems=d.miscItems; console.log('Restored miscItems:',miscItems.length); }
+      if(Array.isArray(d.bringItems) && d.bringItems.length>0){ bringItems=d.bringItems; console.log('Restored bringItems:',bringItems.length); }
+      // Counters
+      if(d.nextMenuId>0) nextMenuId=d.nextMenuId;
+      if(d.nextIngId>0) nextIngId=d.nextIngId;
+      if(d.nextMiscId>0) nextMiscId=d.nextMiscId;
+      if(d.nextBringId>0) nextBringId=d.nextBringId;
+      // Ticked states
+      if(d.shoppingTicked && typeof d.shoppingTicked==='object') shoppingTicked=d.shoppingTicked;
+      if(d.bringTicked && typeof d.bringTicked==='object') bringTicked=d.bringTicked;
+      if(d.actualPortions && typeof d.actualPortions==='object') actualPortions=d.actualPortions;
       if(d.actualTotalRevenue!=null) document.getElementById('actualTotalRevenue').value=d.actualTotalRevenue||'';
-      if(d.actualMode){
-        document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===d.actualMode));
-      }
+      if(d.actualMode) document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===d.actualMode));
       if(d.activeShiftId) activeShiftId=d.activeShiftId;
+    } else {
+      console.log('No Firebase data yet — using defaults');
     }
     setSyncStatus('saved');
   }catch(e){
-    console.error('Firestore save error:',e);
+    console.error('Firebase load error:',e);
     setSyncStatus('error');
-    document.getElementById('syncLabel').textContent='Save failed: '+e.message;
+    document.getElementById('syncLabel').textContent='Load error: '+e.message;
   }
-  finally{document.getElementById('loadingOverlay').style.display='none';}
+  finally{
+    document.getElementById('loadingOverlay').style.display='none';
+  }
+  // Always render everything after load
   updateAll();
   await loadShifts();
 }
@@ -1073,8 +1089,8 @@ function switchNav(btn,name){
   document.querySelectorAll('.nav-panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('nav-'+name).classList.add('active');
   btn.classList.add('active');
-  if(name==='shifts') renderShiftManager();
-  if(name==='compare') populateCompareSelects();
+  if(name==='shifts'){ loadShifts(); } // always reload from Firebase
+  if(name==='compare'){ loadShifts().then(()=>populateCompareSelects()); }
 }
 
 // ── SHIFT MANAGER ──
@@ -1082,9 +1098,23 @@ async function loadShifts(){
   try{
     const snap=await SHIFTS_COL.orderBy('savedAt','desc').get();
     shifts=snap.docs.map(d=>({id:d.id,...d.data()}));
+    console.log('Loaded',shifts.length,'shifts from Firebase');
     renderShiftManager();
     populateCompareSelects();
-  }catch(e){console.error('loadShifts:',e);}
+  }catch(e){
+    console.error('loadShifts error:',e);
+    // If orderBy fails (missing index), fall back to unordered fetch
+    try{
+      const snap=await SHIFTS_COL.get();
+      shifts=snap.docs.map(d=>({id:d.id,...d.data()}));
+      shifts.sort((a,b)=>{ const ta=a.savedAt?.toMillis?.()||0, tb=b.savedAt?.toMillis?.()||0; return tb-ta; });
+      console.log('Loaded',shifts.length,'shifts (fallback)');
+      renderShiftManager();
+      populateCompareSelects();
+    }catch(e2){
+      console.error('loadShifts fallback error:',e2);
+    }
+  }
 }
 
 function renderShiftManager(){
@@ -1396,8 +1426,10 @@ function importFromCSV(input){
   reader.readAsText(file);
 }
 
-// ── INIT ──
+// ── INIT — always load from Firebase first ──
 document.getElementById('shiftDate').value=new Date().toISOString().slice(0,10);
+// Show loading overlay immediately, then fetch Firebase data
+document.getElementById('loadingOverlay').style.display='flex';
 loadDefault();
 </script>
 </body>
