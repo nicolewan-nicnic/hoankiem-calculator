@@ -120,7 +120,14 @@ tr.archived-row td:nth-last-child(2){opacity:1;text-decoration:none;}
 .chip-link-btn{background:transparent;border:1px dashed var(--border);color:var(--mid);border-radius:999px;padding:0.1rem 0.5rem;font-size:0.6rem;cursor:pointer;font-family:var(--font-body);white-space:nowrap;transition:all 0.15s;}
 .chip-link-btn:hover{border-color:var(--green);color:var(--green);background:#f0faf5;}
 
-/* SHOPPING CHECKLIST */
+/* PORTION MODE TOGGLE */
+.col-toggle{background:none;border:none;cursor:pointer;font-size:0.57rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--mid);font-weight:600;padding:0;display:flex;align-items:center;gap:0.3rem;white-space:nowrap;}
+.col-toggle:hover{color:var(--orange);}
+.col-toggle .toggle-pill{display:inline-flex;background:var(--light);border:1px solid var(--border);border-radius:999px;overflow:hidden;font-size:0.5rem;letter-spacing:0.06em;}
+.col-toggle .toggle-pill span{padding:0.08rem 0.35rem;transition:all 0.15s;}
+.col-toggle .toggle-pill span.on{background:var(--orange);color:white;font-weight:700;}
+.col-toggle .toggle-pill span.off{color:var(--mid);}
+.pct-annotation{font-size:0.65rem;color:var(--border);margin-left:0.3rem;}
 .shop-row.bought td{opacity:0.38;text-decoration:line-through;}
 .shop-check{width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0;}
 .shop-progress{display:flex;align-items:center;gap:0.7rem;margin-bottom:0.75rem;font-size:0.7rem;color:var(--mid);}
@@ -313,6 +320,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <div class="field-group"><label>Date</label><input type="date" id="shiftDate" oninput="scheduleSave()"></div>
         <div class="field-group"><label>Shift Length (hrs)</label><input type="number" id="shiftHours" value="6" min="1" max="24" oninput="updateAll();scheduleSave()"></div>
         <div class="field-group"><label>Total Planned Portions</label><input type="number" id="totalPortions" value="0" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
+        <div class="field-group" id="targetPortionsGroup" style="display:none;"><label>Target Total Portions <span style="font-size:0.55rem;opacity:0.6;">(for % mode)</span></label><input type="number" id="targetTotalPortions" value="70" min="1" step="1" oninput="recomputePortionsFromPct();scheduleSave()"></div>
         <div class="field-group"><label>Items Sold / Hour <span style="font-size:0.55rem;opacity:0.6;">(predicted)</span></label><input type="text" id="impliedRate" value="—" readonly style="background:#eee;color:#888;cursor:not-allowed;"></div>
       </div>
       <!-- Per-item hourly prediction table -->
@@ -352,14 +360,17 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <div class="table-scroll"><table>
           <thead><tr>
             <th style="min-width:140px;">Item</th><th>Price (£)</th>
-            <th>Est. Portions <span style="font-weight:400;opacity:0.6;">to sell</span></th>
+            <th><button class="col-toggle" onclick="togglePortionMode()" title="Click to switch between Portions and % of total">
+              <span id="portionModeLabel">Est. Portions</span>
+              <span class="toggle-pill"><span id="pillPortions" class="on">qty</span><span id="pillPct" class="off">%</span></span>
+            </button></th>
             <th>Cost/Portion</th><th>Revenue</th><th>Profit</th>
             <th>Linked Ingredients</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="menuBody"></tbody>
         </table></div>
         <button class="btn btn-add" onclick="addMenuItem()">+ Add Item</button>
-        <p class="notice">Enter the planned number of portions for each item. Total portions and revenue are calculated automatically. Archived items are excluded.</p>
+        <p class="notice" id="menuNotice">Enter the planned number of portions for each item. Click the column header to switch to % of total mode. Archived items are excluded.</p>
       </div>
     </div>
   </div>
@@ -600,6 +611,8 @@ async function saveDefault(){
       actualPortions:{...actualPortions},
       actualTotalRevenue:getActualTotalRevenue(),
       actualMode:getActualMode(),
+      portionInputMode,
+      targetTotalPortions:getTargetTotalPortions(),
       activeShiftId:activeShiftId||null,
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -639,6 +652,8 @@ async function loadDefault(){
       if(d.actualPortions && typeof d.actualPortions==='object') actualPortions=d.actualPortions;
       if(d.actualTotalRevenue!=null) document.getElementById('actualTotalRevenue').value=d.actualTotalRevenue||'';
       if(d.actualMode) document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===d.actualMode));
+      if(d.portionInputMode) portionInputMode=d.portionInputMode;
+      if(d.targetTotalPortions) document.getElementById('targetTotalPortions').value=d.targetTotalPortions;
       if(d.activeShiftId) activeShiftId=d.activeShiftId;
     } else {
       console.log('No Firebase data yet — using defaults');
@@ -702,12 +717,14 @@ let bringItems=[
 let nextMenuId=9,nextIngId=14,nextMiscId=6,nextBringId=8;
 let shoppingTicked={},bringTicked={},actualPortions={};
 let activeShiftId=null;
+let portionInputMode='portions'; // 'portions' | 'pct'
 let shifts=[]; // loaded from Firestore
 let modalTargetId=null,modalTempLinks=[];
 let pendingShiftSave=null; // {type,existingId}
 
 // ── HELPERS ──
 const getShiftHours         = ()=>parseFloat(document.getElementById('shiftHours').value)||6;
+const getTargetTotalPortions= ()=>parseFloat(document.getElementById('targetTotalPortions').value)||70;
 const getImpliedRate        = ()=>{ const h=getShiftHours(); return h>0?Math.round(getTotalPortions()/h*10)/10:0; };
 const getActualMode      = ()=>document.querySelector('[name="actualMode"]:checked')?.value||'portions';
 const getActualTotalRevenue=()=>parseFloat(document.getElementById('actualTotalRevenue').value)||0;
@@ -730,13 +747,56 @@ const archiveBtn=(id,arr,type)=>{
     : `<button class="btn btn-archive" onclick="${type}Archive(${id},true)" title="Archive">&#9632; Archive</button>`;
 };
 
+// ── PORTION INPUT MODE ──
+function applyPortionModeUI(){
+  const isPct=portionInputMode==='pct';
+  document.getElementById('portionModeLabel').textContent=isPct?'% of Total':'Est. Portions';
+  document.getElementById('pillPortions').className=isPct?'off':'on';
+  document.getElementById('pillPct').className=isPct?'on':'off';
+  document.getElementById('targetPortionsGroup').style.display=isPct?'':'none';
+  document.getElementById('menuNotice').textContent=isPct
+    ?'Enter each item\'s share of total orders as a %. Portions are calculated from the Target Total above. Click the column header to switch back.'
+    :'Enter the planned number of portions for each item. Click the column header to switch to % of total mode. Archived items are excluded.';
+}
+
+function togglePortionMode(){
+  if(portionInputMode==='portions'){
+    // Switching to pct: derive pct from current portions
+    const total=getTotalPortions()||1;
+    activeMenuItems().forEach(item=>{
+      item.pct=Math.round((item.plannedPortions||0)/total*1000)/10; // 1dp
+    });
+    portionInputMode='pct';
+  } else {
+    // Switching back to portions: plannedPortions already correct, clear pct
+    portionInputMode='portions';
+  }
+  applyPortionModeUI();
+  updateAll();
+  scheduleSave();
+}
+
+function recomputePortionsFromPct(){
+  if(portionInputMode!=='pct') return;
+  const target=getTargetTotalPortions();
+  activeMenuItems().forEach(item=>{
+    item.plannedPortions=Math.round((item.pct||0)/100*target);
+  });
+  updateAll();
+}
+
 // ── RENDER MENU ──
 function renderMenu(){
   const tbody=document.getElementById('menuBody');
   tbody.innerHTML='';
+  const isPct=portionInputMode==='pct';
+  const target=getTargetTotalPortions();
   let totalRev=0,totalProfit=0,totalPortions=0;
   menuItems.forEach(item=>{
     const isArch=item.archived;
+    if(isPct&&!isArch){
+      item.plannedPortions=Math.round((item.pct||0)/100*target);
+    }
     const portions=isArch?0:itemPortions(item);
     const costPP=isArch?0:itemCostPP(item);
     const rev=portions*item.price;
@@ -748,12 +808,26 @@ function renderMenu(){
     }).join('');
     const tr=document.createElement('tr');
     if(isArch) tr.className='archived-row';
+    let portionCell;
+    if(isPct){
+      const pctVal=item.pct||0;
+      portionCell=`<td>
+        <input type="number" value="${pctVal}" min="0" max="100" step="0.1"
+          onchange="updateMenuPct(${item.id},+this.value)"
+          style="width:52px;" ${isArch?'disabled':''}><span class="pct-annotation">%</span>
+        ${!isArch?`<span class="pct-annotation">(${portions})</span>`:''}
+      </td>`;
+    } else {
+      portionCell=`<td>
+        <input type="number" value="${item.plannedPortions||0}" min="0" step="1"
+          onchange="updateMenu(${item.id},'plannedPortions',+this.value)"
+          style="width:55px;" ${isArch?'disabled':''}>
+      </td>`;
+    }
     tr.innerHTML=`
       <td><input type="text" value="${esc(item.name)}" onchange="updateMenu(${item.id},'name',this.value)" style="min-width:130px;"></td>
       <td><input type="number" value="${item.price}" min="0" step="0.5" onchange="updateMenu(${item.id},'price',+this.value)" style="width:50px;"></td>
-      <td>
-        <input type="number" value="${item.plannedPortions||0}" min="0" step="1" onchange="updateMenu(${item.id},'plannedPortions',+this.value)" style="width:55px;" ${isArch?'disabled':''}>
-      </td>
+      ${portionCell}
       <td class="calc-cell ${!isArch&&costPP>0?'highlight':''}">${isArch?'—':fmt(costPP)}</td>
       <td class="calc-cell highlight">${isArch?'—':fmt(rev)}</td>
       <td class="${!isArch?(profit>=0?'pos':'neg'):''}">${isArch?'—':fmt(profit)}</td>
@@ -765,8 +839,10 @@ function renderMenu(){
   });
   const totTr=document.createElement('tr');
   totTr.style.background='#fdf7ee';
+  const totalPctSum=isPct?activeMenuItems().reduce((s,m)=>s+(m.pct||0),0).toFixed(1):'';
+  const totPortionLabel=isPct?`${totalPortions}&nbsp;<span style="font-weight:400;font-size:0.65rem;color:var(--border);">(${totalPctSum}%)</span>`:String(totalPortions);
   totTr.innerHTML=`<td style="font-weight:700;font-size:0.68rem;text-transform:uppercase;">TOTAL</td><td></td>
-    <td class="calc-cell" style="font-weight:700;">${totalPortions}</td>
+    <td class="calc-cell" style="font-weight:700;">${totPortionLabel}</td>
     <td></td>
     <td class="calc-cell highlight" style="font-weight:700;">${fmt(totalRev)}</td>
     <td class="${totalProfit>=0?'pos':'neg'}">${fmt(totalProfit)}</td>
@@ -774,6 +850,7 @@ function renderMenu(){
   tbody.appendChild(totTr);
   return{revenue:totalRev,profit:totalProfit};
 }
+
 
 // ── RENDER INGREDIENTS ──
 function renderIngredients(){
@@ -989,6 +1066,7 @@ function renderActuals(plannedRevenue){
 
 // ── MASTER UPDATE ──
 function updateAll(){
+  applyPortionModeUI();
   const {revenue,profit}=renderMenu();
   const total=getTotalPortions();
   document.getElementById('totalPortions').value=total;
@@ -1027,6 +1105,7 @@ function updateAll(){
 
 // ── MUTATIONS ──
 function updateMenu(id,f,v){const m=menuItems.find(x=>x.id===id);if(m)m[f]=v;updateAll();scheduleSave();}
+function updateMenuPct(id,v){const m=menuItems.find(x=>x.id===id);if(m){m.pct=v;m.plannedPortions=Math.round(v/100*getTargetTotalPortions());}updateAll();scheduleSave();}
 function removeMenuItem(id){menuItems=menuItems.filter(m=>m.id!==id);updateAll();scheduleSave();}
 function addMenuItem(){menuItems.push({id:nextMenuId++,name:'New Item',price:0,plannedPortions:0,linkedIngIds:[],archived:false});updateAll();scheduleSave();}
 function menuArchive(id,v){const m=menuItems.find(x=>x.id===id);if(m)m.archived=v;updateAll();scheduleSave();}
@@ -1188,6 +1267,8 @@ function snapshotCurrentState(extraFields={}){
     actualPortions:{...actualPortions},
     actualTotalRevenue:getActualTotalRevenue(),
     actualMode:getActualMode(),
+    portionInputMode,
+    targetTotalPortions:getTargetTotalPortions(),
     nextMenuId,nextIngId,nextMiscId,nextBringId,
     ...extraFields
   };
@@ -1204,6 +1285,8 @@ function loadStateFromSnapshot(d){
   if(d.actualPortions) actualPortions=d.actualPortions;
   if(d.actualTotalRevenue!=null) document.getElementById('actualTotalRevenue').value=d.actualTotalRevenue||'';
   if(d.actualMode) document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===d.actualMode));
+  if(d.portionInputMode) portionInputMode=d.portionInputMode;
+  if(d.targetTotalPortions) document.getElementById('targetTotalPortions').value=d.targetTotalPortions;
   if(d.nextMenuId) nextMenuId=d.nextMenuId;
   if(d.nextIngId) nextIngId=d.nextIngId;
   if(d.nextMiscId) nextMiscId=d.nextMiscId;
