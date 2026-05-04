@@ -355,7 +355,6 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
             <th>Linked Ingredients</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="menuBody"></tbody>
-        </table>
         </table></div>
         <button class="btn btn-add" onclick="addMenuItem()">+ Add Item</button>
         <p class="notice">Enter the planned number of portions for each item. Total portions and revenue are calculated automatically. Archived items are excluded.</p>
@@ -374,7 +373,6 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
             <th>Cost/Portion</th><th>Units Needed</th><th>Total Cost</th><th>Used In</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="ingredientBody"></tbody>
-        </table>
         </table></div>
         <button class="btn btn-add" onclick="addIngredient()">+ Add Ingredient</button>
       </div>
@@ -414,7 +412,6 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
             <th style="min-width:160px;">Expense</th><th>Category</th><th>Cost</th><th>Type</th><th>Effective Cost</th><th>Notes</th><th>Status</th><th></th>
           </tr></thead>
           <tbody id="miscBody"></tbody>
-        </table>
         </table></div>
         <button class="btn btn-add" onclick="addMiscItem()">+ Add Expense</button>
         <p class="notice"><b>Per Shift (£)</b> = flat cost · <b>Per Portion (£)</b> = cost × portions · <b>% of Revenue</b> = e.g. card reader fee</p>
@@ -436,7 +433,6 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
         <div class="table-scroll"><table>
           <thead><tr><th style="width:28px;">&#10003;</th><th>Item</th><th>Category</th><th>Qty</th><th>Notes</th><th>Status</th><th></th></tr></thead>
           <tbody id="bringBody"></tbody>
-        </table>
         </table></div>
         <button class="btn btn-add" onclick="addBringItem()">+ Add Item</button>
       </div>
@@ -654,9 +650,9 @@ async function loadDefault(){
   finally{
     document.getElementById('loadingOverlay').style.display='none';
   }
-  // Always render everything after load
-  updateAll();
+  // Load shifts first so activeShiftId lookup works in updateActiveBanner
   await loadShifts();
+  updateAll();
 }
 
 // ── DEFAULT DATA ──
@@ -710,6 +706,7 @@ let pendingShiftSave=null; // {type,existingId}
 
 // ── HELPERS ──
 const getShiftHours         = ()=>parseFloat(document.getElementById('shiftHours').value)||6;
+const getImpliedRate        = ()=>{ const h=getShiftHours(); return h>0?Math.round(getTotalPortions()/h*10)/10:0; };
 const getActualMode      = ()=>document.querySelector('[name="actualMode"]:checked')?.value||'portions';
 const getActualTotalRevenue=()=>parseFloat(document.getElementById('actualTotalRevenue').value)||0;
 const fmt  = n=>'£'+n.toFixed(2);
@@ -1007,6 +1004,22 @@ function updateAll(){
   document.getElementById('res-profit').textContent=fmt(totalProfit);
   document.getElementById('res-margin').textContent=fmtP(margin);
   document.getElementById('res-profit').parentElement.className='result-cell '+(totalProfit>=0?'profit':'loss');
+  // Implied rate
+  const rate=getImpliedRate();
+  const rateStr=rate>0?rate+'/hr':'—';
+  document.getElementById('impliedRate').value=rateStr;
+  document.getElementById('res-rate').textContent=rateStr;
+  // Hourly prediction per item
+  const hpBody=document.getElementById('hourlyPredictionBody');
+  const hours=getShiftHours();
+  hpBody.innerHTML='';
+  activeMenuItems().forEach(item=>{
+    const pph=hours>0?(item.plannedPortions||0)/hours:0;
+    const chip=document.createElement('div');
+    chip.style.cssText='background:var(--light);border:1px solid var(--border);border-radius:3px;padding:0.3rem 0.6rem;font-size:0.68rem;white-space:nowrap;';
+    chip.innerHTML=`<span style="color:var(--mid);">${esc(item.name)}</span> <strong style="color:var(--dark);">${pph.toFixed(1)}/hr</strong>`;
+    hpBody.appendChild(chip);
+  });
   updateActiveBanner();
 }
 
@@ -1078,11 +1091,16 @@ document.getElementById('linkModal').addEventListener('click',e=>{if(e.target===
 
 // ── TABS & NAV ──
 function switchTab(btn,name){
-  const container=btn.closest('.tabs').parentElement;
-  container.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  container.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  container.querySelector('#tab-'+name).classList.add('active');
+  // Find the tabs bar and its siblings — works regardless of nesting
+  const tabsBar = btn.closest('.tabs');
+  // Deactivate all tabs in this bar
+  tabsBar.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
+  // Find all sibling tab-panels (they share the same parent as the tabs bar)
+  const parent = tabsBar.parentElement;
+  parent.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  const target = document.getElementById('tab-'+name);
+  if(target) target.classList.add('active');
 }
 function switchNav(btn,name){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
@@ -1158,6 +1176,7 @@ function renderShiftGrid(gridId,list){
 function snapshotCurrentState(extraFields={}){
   return {
     shiftHours:getShiftHours(),
+    portionsPerHour:getImpliedRate(),
     menuItems:JSON.parse(JSON.stringify(menuItems)),
     ingredients:JSON.parse(JSON.stringify(ingredients)),
     miscItems:JSON.parse(JSON.stringify(miscItems)),
@@ -1385,7 +1404,7 @@ function exportToCSV(){
     [],
     ['"=== SHIFT SETTINGS ==="'],
     ['"Shift Hours"',getShiftHours()],
-    ['"Portions Per Hour"',getPortionsPerHour()],
+    ['"Portions Per Hour"',getImpliedRate()],
     ['"Total Portions"','=B5*B6'],
     [],
     ['"=== INGREDIENTS ==="'],
@@ -1414,12 +1433,43 @@ function importFromCSV(input){
       const lines=text.split(/\r?\n/);
       const pr=l=>{const r=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"'&&q&&l[i+1]==='"'){c+='"';i++;}else if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c.replace(/^"|"$/g,''));c='';}else c+=ch;}r.push(c.replace(/^"|"$/g,''));return r;};
       let sec=-1;
-      lines.forEach((l,i)=>{const r=pr(l);if(r[0]==='Shift Hours'&&r[1])document.getElementById('shiftHours').value=parseFloat(r[1])||6;if(r[0]==='Portions Per Hour'&&r[1])document.getElementById('portionsPerHour').value=parseFloat(r[1])||13;});
+      // Restore shift hours (note: Portions Per Hour is calculated, not stored as an input)
+      lines.forEach((l)=>{const r=pr(l);if(r[0]==='Shift Hours'&&r[1])document.getElementById('shiftHours').value=parseFloat(r[1])||6;});
+      // Parse ingredients
       lines.forEach((l,i)=>{if(l.includes('=== INGREDIENTS'))sec=i;});
-      if(sec>=0){const ni=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Ingredient')break;ni.push({id:id++,name:r[0],unit:r[1]||'unit',cost:parseFloat(r[2])||0,portionsPerUnit:parseFloat(r[3])||1,archived:r[4]==='yes'});}if(ni.length){ingredients=ni;nextIngId=id;}}
+      let newIngredients=ingredients; // fallback: keep existing
+      if(sec>=0){const ni=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Ingredient')break;ni.push({id:id++,name:r[0],unit:r[1]||'unit',cost:parseFloat(r[2])||0,portionsPerUnit:parseFloat(r[3])||1,archived:r[4]==='yes'});}if(ni.length){newIngredients=ni;nextIngId=id;}}
+      // Parse menu items, then re-link by ingredient name match
       lines.forEach((l,i)=>{if(l.includes('=== MENU ITEMS'))sec=i;});
-      if(sec>=0){const nm=[];let id=1;for(let i=sec+2;i<lines.length;i++){const r=pr(lines[i]);if(!r[0]||r[0].includes('===')||r[0]==='Item')break;nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,plannedPortions:parseFloat(r[2])||0,archived:r[3]==='yes',linkedIngIds:[]});}if(nm.length){menuItems=nm;nextMenuId=id;}}
-      updateAll();scheduleSave();alert('Imported!');
+      if(sec>=0){
+        const nm=[];let id=1;
+        for(let i=sec+2;i<lines.length;i++){
+          const r=pr(lines[i]);
+          if(!r[0]||r[0].includes('===')||r[0]==='Item')break;
+          // Preserve existing links by matching item name, then re-link by ingredient name
+          const existing=menuItems.find(m=>m.name===r[0]);
+          let linkedIngIds=[];
+          if(existing&&existing.linkedIngIds.length){
+            // Remap old ingredient IDs → new ingredient IDs by name
+            existing.linkedIngIds.forEach(oldId=>{
+              const oldIng=ingredients.find(x=>x.id===oldId);
+              if(oldIng){
+                const matched=newIngredients.find(x=>x.name===oldIng.name);
+                if(matched) linkedIngIds.push(matched.id);
+              }
+            });
+          }
+          nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,plannedPortions:parseFloat(r[2])||0,archived:r[3]==='yes',linkedIngIds});
+        }
+        if(nm.length){menuItems=nm;nextMenuId=id;}
+      }
+      ingredients=newIngredients;
+      updateAll();scheduleSave();
+      const unlinked=menuItems.filter(m=>m.linkedIngIds.length===0&&!m.archived);
+      const msg=unlinked.length
+        ?`Imported! Note: ${unlinked.length} menu item(s) have no ingredient links — you may need to re-link them manually: ${unlinked.map(m=>m.name).join(', ')}.`
+        :'Imported! Ingredient links restored by name-matching.';
+      alert(msg);
     }catch(err){alert('Import failed.');console.error(err);}
     input.value='';
   };
