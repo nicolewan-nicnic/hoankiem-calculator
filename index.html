@@ -302,7 +302,7 @@ footer{text-align:center;padding:1.5rem;font-size:0.58rem;letter-spacing:0.08em;
 <div class="container">
 
   <!-- Active shift banner -->
-  <div id="activeBanner" style="display:none;background:var(--mid);color:var(--cream);padding:0.45rem 1rem;font-size:0.68rem;letter-spacing:0.06em;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+  <div id="activeBanner" style="display:none;background:var(--mid);color:var(--cream);padding:0.45rem 1rem;font-size:0.68rem;letter-spacing:0.06em;align-items:center;gap:0.75rem;flex-wrap:wrap;">
     <span>&#128196; Working on: <strong id="activeBannerName"></strong></span>
     <span id="activeBannerType" class="sc-badge"></span>
     <button class="btn btn-sm btn-secondary" style="margin-left:auto;" onclick="saveCurrentShift()">&#128190; Save Shift</button>
@@ -761,14 +761,14 @@ function applyPortionModeUI(){
 
 function togglePortionMode(){
   if(portionInputMode==='portions'){
-    // Switching to pct: derive pct from current portions
+    // Switching to pct: derive pct from current portions for ALL items (including archived)
     const total=getTotalPortions()||1;
-    activeMenuItems().forEach(item=>{
+    menuItems.forEach(item=>{
       item.pct=Math.round((item.plannedPortions||0)/total*1000)/10; // 1dp
     });
     portionInputMode='pct';
   } else {
-    // Switching back to portions: plannedPortions already correct, clear pct
+    // Switching back to portions: plannedPortions already correct, leave pct as-is for next switch
     portionInputMode='portions';
   }
   applyPortionModeUI();
@@ -1106,12 +1106,12 @@ function updateAll(){
 // ── MUTATIONS ──
 function updateMenu(id,f,v){const m=menuItems.find(x=>x.id===id);if(m)m[f]=v;updateAll();scheduleSave();}
 function updateMenuPct(id,v){const m=menuItems.find(x=>x.id===id);if(m){m.pct=v;m.plannedPortions=Math.round(v/100*getTargetTotalPortions());}updateAll();scheduleSave();}
-function removeMenuItem(id){menuItems=menuItems.filter(m=>m.id!==id);updateAll();scheduleSave();}
-function addMenuItem(){menuItems.push({id:nextMenuId++,name:'New Item',price:0,plannedPortions:0,linkedIngIds:[],archived:false});updateAll();scheduleSave();}
+function removeMenuItem(id){menuItems=menuItems.filter(m=>m.id!==id);delete actualPortions[id];updateAll();scheduleSave();}
+function addMenuItem(){menuItems.push({id:nextMenuId++,name:'New Item',price:0,plannedPortions:0,pct:0,linkedIngIds:[],archived:false});updateAll();scheduleSave();document.querySelector('[data-tab="menu"]').click();}
 function menuArchive(id,v){const m=menuItems.find(x=>x.id===id);if(m)m.archived=v;updateAll();scheduleSave();}
 
 function updateIng(id,f,v){const i=ingredients.find(x=>x.id===id);if(i)i[f]=v;updateAll();scheduleSave();}
-function removeIngredient(id){menuItems.forEach(m=>{m.linkedIngIds=m.linkedIngIds.filter(x=>x!==id);});ingredients=ingredients.filter(i=>i.id!==id);updateAll();scheduleSave();}
+function removeIngredient(id){menuItems.forEach(m=>{m.linkedIngIds=m.linkedIngIds.filter(x=>x!==id);});ingredients=ingredients.filter(i=>i.id!==id);delete shoppingTicked[id];updateAll();scheduleSave();}
 function addIngredient(){ingredients.push({id:nextIngId++,name:'New Ingredient',unit:'unit',cost:0,portionsPerUnit:1,archived:false});updateAll();scheduleSave();document.querySelector('[data-tab="ingredients"]').click();}
 function ingArchive(id,v){const i=ingredients.find(x=>x.id===id);if(i)i.archived=v;updateAll();scheduleSave();}
 
@@ -1121,7 +1121,7 @@ function addMiscItem(){miscItems.push({id:nextMiscId++,name:'New Expense',catego
 function miscArchive(id,v){const m=miscItems.find(x=>x.id===id);if(m)m.archived=v;updateAll();scheduleSave();}
 
 function updateBring(id,f,v){const b=bringItems.find(x=>x.id===id);if(b)b[f]=v;updateAll();scheduleSave();}
-function removeBringItem(id){bringItems=bringItems.filter(b=>b.id!==id);updateAll();scheduleSave();}
+function removeBringItem(id){bringItems=bringItems.filter(b=>b.id!==id);delete bringTicked[id];updateAll();scheduleSave();}
 function addBringItem(){bringItems.push({id:nextBringId++,name:'New Item',category:'Equipment',qty:1,notes:'',archived:false});updateAll();scheduleSave();document.querySelector('[data-tab="bring"]').click();}
 function bringArchive(id,v){const b=bringItems.find(x=>x.id===id);if(b)b.archived=v;updateAll();scheduleSave();}
 
@@ -1189,7 +1189,7 @@ function switchNav(btn,name){
   document.getElementById('nav-'+name).classList.add('active');
   btn.classList.add('active');
   if(name==='shifts'){ loadShifts(); } // always reload from Firebase
-  if(name==='compare'){ loadShifts().then(()=>populateCompareSelects()); }
+  if(name==='compare'){ loadShifts().then(()=>renderCompare()); }
 }
 
 // ── SHIFT MANAGER ──
@@ -1280,13 +1280,15 @@ function loadStateFromSnapshot(d){
   if(d.ingredients) ingredients=d.ingredients;
   if(d.miscItems) miscItems=d.miscItems;
   if(d.bringItems) bringItems=d.bringItems;
-  if(d.shoppingTicked) shoppingTicked=d.shoppingTicked;
-  if(d.bringTicked) bringTicked=d.bringTicked;
-  if(d.actualPortions) actualPortions=d.actualPortions;
-  if(d.actualTotalRevenue!=null) document.getElementById('actualTotalRevenue').value=d.actualTotalRevenue||'';
-  if(d.actualMode) document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===d.actualMode));
-  if(d.portionInputMode) portionInputMode=d.portionInputMode;
-  if(d.targetTotalPortions) document.getElementById('targetTotalPortions').value=d.targetTotalPortions;
+  // Always reset these to whatever the loaded shift has (or empty), to avoid bleed-through between shifts
+  shoppingTicked = (d.shoppingTicked && typeof d.shoppingTicked==='object') ? d.shoppingTicked : {};
+  bringTicked    = (d.bringTicked    && typeof d.bringTicked==='object')    ? d.bringTicked    : {};
+  actualPortions = (d.actualPortions && typeof d.actualPortions==='object') ? d.actualPortions : {};
+  document.getElementById('actualTotalRevenue').value = (d.actualTotalRevenue!=null) ? d.actualTotalRevenue : '';
+  const mode = d.actualMode || 'portions';
+  document.querySelectorAll('[name="actualMode"]').forEach(r=>r.checked=(r.value===mode));
+  portionInputMode = d.portionInputMode || 'portions';
+  document.getElementById('targetTotalPortions').value = d.targetTotalPortions || 70;
   if(d.nextMenuId) nextMenuId=d.nextMenuId;
   if(d.nextIngId) nextIngId=d.nextIngId;
   if(d.nextMiscId) nextMiscId=d.nextMiscId;
@@ -1408,11 +1410,17 @@ document.getElementById('shiftModal').addEventListener('click',e=>{if(e.target==
 
 // ── COMPARE ──
 function populateCompareSelects(){
+  const leftSel=document.getElementById('compareLeft');
+  const rightSel=document.getElementById('compareRight');
+  const prevLeft=leftSel.value, prevRight=rightSel.value;
   const opts=['<option value="">— Select shift —</option>',
     ...shifts.map(s=>`<option value="${s.id}">${esc(s.name||'Unnamed')} (${s.type}${s.date?' · '+s.date:''})</option>`)
   ].join('');
-  document.getElementById('compareLeft').innerHTML=opts;
-  document.getElementById('compareRight').innerHTML=opts;
+  leftSel.innerHTML=opts;
+  rightSel.innerHTML=opts;
+  // Restore prior selections if still valid
+  if(prevLeft && shifts.some(s=>s.id===prevLeft)) leftSel.value=prevLeft;
+  if(prevRight && shifts.some(s=>s.id===prevRight)) rightSel.value=prevRight;
 }
 
 function renderCompare(){
@@ -1491,13 +1499,15 @@ function exportToCSV(){
     ['"Shift Hours"',getShiftHours()],
     ['"Portions Per Hour"',getImpliedRate()],
     ['"Total Portions"','=B5*B6'],
+    ['"Portion Input Mode"','"'+portionInputMode+'"'],
+    ['"Target Total Portions"',getTargetTotalPortions()],
     [],
     ['"=== INGREDIENTS ==="'],
     ['"Ingredient"','"Unit"','"Cost/Unit"','"Portions/Unit"','"Archived"'],
   ];
   ingredients.forEach(i=>rows.push(['"'+i.name+'"','"'+i.unit+'"',i.cost,i.portionsPerUnit,i.archived?'yes':'no']));
-  rows.push([],['"=== MENU ITEMS ==="'],['"Item"','"Price"','"Proportion"','"Archived"']);
-  menuItems.forEach(m=>rows.push(['"'+m.name+'"',m.price,m.plannedPortions||0,m.archived?'yes':'no']));
+  rows.push([],['"=== MENU ITEMS ==="'],['"Item"','"Price"','"Portions"','"Archived"','"Pct"']);
+  menuItems.forEach(m=>rows.push(['"'+m.name+'"',m.price,m.plannedPortions||0,m.archived?'yes':'no',m.pct||0]));
   rows.push([],['"=== MISC EXPENSES ==="'],['"Name"','"Category"','"Cost"','"Type"','"Archived"','"Notes"']);
   miscItems.forEach(m=>rows.push(['"'+m.name+'"','"'+(m.category||'')+'"',m.cost,'"'+m.type+'"',m.archived?'yes':'no','"'+(m.notes||'')+'"']));
   rows.push([],['"=== BRING LIST ==="'],['"Item"','"Category"','"Qty"','"Notes"','"Archived"']);
@@ -1518,8 +1528,13 @@ function importFromCSV(input){
       const lines=text.split(/\r?\n/);
       const pr=l=>{const r=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch==='"'&&q&&l[i+1]==='"'){c+='"';i++;}else if(ch==='"'){q=!q;}else if(ch===','&&!q){r.push(c.replace(/^"|"$/g,''));c='';}else c+=ch;}r.push(c.replace(/^"|"$/g,''));return r;};
       let sec=-1;
-      // Restore shift hours (note: Portions Per Hour is calculated, not stored as an input)
-      lines.forEach((l)=>{const r=pr(l);if(r[0]==='Shift Hours'&&r[1])document.getElementById('shiftHours').value=parseFloat(r[1])||6;});
+      // Restore shift hours, portion mode and target total
+      lines.forEach((l)=>{
+        const r=pr(l);
+        if(r[0]==='Shift Hours'&&r[1]) document.getElementById('shiftHours').value=parseFloat(r[1])||6;
+        if(r[0]==='Portion Input Mode'&&r[1]) portionInputMode=(r[1]==='pct'?'pct':'portions');
+        if(r[0]==='Target Total Portions'&&r[1]) document.getElementById('targetTotalPortions').value=parseFloat(r[1])||70;
+      });
       // Parse ingredients
       lines.forEach((l,i)=>{if(l.includes('=== INGREDIENTS'))sec=i;});
       let newIngredients=ingredients; // fallback: keep existing
@@ -1544,7 +1559,7 @@ function importFromCSV(input){
               }
             });
           }
-          nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,plannedPortions:parseFloat(r[2])||0,archived:r[3]==='yes',linkedIngIds});
+          nm.push({id:id++,name:r[0],price:parseFloat(r[1])||0,plannedPortions:parseFloat(r[2])||0,archived:r[3]==='yes',pct:parseFloat(r[4])||0,linkedIngIds});
         }
         if(nm.length){menuItems=nm;nextMenuId=id;}
       }
